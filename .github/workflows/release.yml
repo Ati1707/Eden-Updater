@@ -355,7 +355,6 @@ jobs:
         echo "## 🆘 Support" >> $CHANGELOG_FILE
         echo "" >> $CHANGELOG_FILE
         echo "- 📋 **Issues**: [Report bugs or request features]($REPO_URL/issues)" >> $CHANGELOG_FILE
-        echo "- 💬 **Discussions**: [Community support]($REPO_URL/discussions)" >> $CHANGELOG_FILE
         echo "- 📖 **Documentation**: [Project README]($REPO_URL#readme)" >> $CHANGELOG_FILE
         echo "changelog<<EOF" >> $GITHUB_OUTPUT
         cat $CHANGELOG_FILE >> $GITHUB_OUTPUT
