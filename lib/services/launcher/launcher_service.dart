@@ -247,46 +247,110 @@ class LauncherService {
 
   /// Create a desktop shortcut for Eden
   Future<void> createDesktopShortcut() async {
-    if (!Platform.isLinux) return;
+    if (Platform.isWindows) {
+      await _createWindowsShortcut();
+    }
+    if (Platform.isLinux) {
+      try {
+        final channel = await _preferencesService.getReleaseChannel();
+        final edenExecutable = await _preferencesService.getEdenExecutablePath(
+          channel,
+        );
 
+        if (edenExecutable == null || !await File(edenExecutable).exists()) {
+          throw LauncherException(
+            'Eden executable not found',
+            'Cannot create shortcut: Eden is not installed',
+          );
+        }
+
+        final desktopPaths = await _getDesktopPaths();
+        if (desktopPaths.isEmpty) return;
+
+        final shortcutContent = _generateDesktopEntry(edenExecutable, channel);
+        final shortcutName = channel == 'nightly'
+            ? 'Eden-Nightly.desktop'
+            : 'Eden.desktop';
+
+        for (final desktopPath in desktopPaths) {
+          try {
+            final shortcutFile = File(path.join(desktopPath, shortcutName));
+            await shortcutFile.writeAsString(shortcutContent);
+
+            // Make the desktop file executable
+            await Process.run('chmod', ['+x', shortcutFile.path]);
+          } catch (e) {
+            // Continue to next path if this one fails
+            continue;
+          }
+        }
+      } catch (e) {
+        throw LauncherException(
+          'Failed to create desktop shortcut',
+          e.toString(),
+        );
+      }
+    }
+  }
+
+  Future<void> _createWindowsShortcut() async {
     try {
       final channel = await _preferencesService.getReleaseChannel();
-      final edenExecutable = await _preferencesService.getEdenExecutablePath(
-        channel,
-      );
+      final channelName = channel == 'nightly' ? 'Nightly' : 'Stable';
+      final shortcutName = 'Eden $channelName.lnk';
 
-      if (edenExecutable == null || !await File(edenExecutable).exists()) {
+      // Get the updater executable path (current executable)
+      final updaterExecutable = Platform.resolvedExecutable;
+      if (!await File(updaterExecutable).exists()) {
         throw LauncherException(
-          'Eden executable not found',
-          'Cannot create shortcut: Eden is not installed',
+          'Updater executable not found',
+          'Cannot create shortcut without valid executable',
         );
       }
 
-      final desktopPaths = await _getDesktopPaths();
-      if (desktopPaths.isEmpty) return;
+      // Get desktop path
+      final result = await Process.run('powershell', [
+        '-Command',
+        '[Environment]::GetFolderPath("Desktop")',
+      ]);
 
-      final shortcutContent = _generateDesktopEntry(edenExecutable, channel);
-      final shortcutName = channel == 'nightly'
-          ? 'Eden-Nightly.desktop'
-          : 'Eden.desktop';
+      if (result.exitCode != 0) {
+        throw LauncherException(
+          'Failed to get desktop path',
+          result.stderr.toString(),
+        );
+      }
 
-      for (final desktopPath in desktopPaths) {
-        try {
-          final shortcutFile = File(path.join(desktopPath, shortcutName));
-          await shortcutFile.writeAsString(shortcutContent);
+      final desktopPath = result.stdout.toString().trim();
+      final shortcutPath = path.join(desktopPath, shortcutName);
 
-          // Make the desktop file executable
-          await Process.run('chmod', ['+x', shortcutFile.path]);
-        } catch (e) {
-          // Continue to next path if this one fails
-          continue;
-        }
+      // Create PowerShell script to create shortcut with auto-launch and channel arguments
+      final powershellScript =
+          '''
+\$WshShell = New-Object -comObject WScript.Shell
+\$Shortcut = \$WshShell.CreateShortcut("$shortcutPath")
+\$Shortcut.TargetPath = "$updaterExecutable"
+\$Shortcut.Arguments = "--auto-launch --channel $channel"
+\$Shortcut.WorkingDirectory = "${path.dirname(updaterExecutable)}"
+\$Shortcut.IconLocation = "$updaterExecutable"
+\$Shortcut.Description = "Eden $channelName Emulator"
+\$Shortcut.Save()
+''';
+
+      final scriptResult = await Process.run('powershell', [
+        '-Command',
+        powershellScript,
+      ]);
+
+      if (scriptResult.exitCode != 0) {
+        throw LauncherException(
+          'Failed to create shortcut',
+          scriptResult.stderr.toString(),
+        );
       }
     } catch (e) {
-      throw LauncherException(
-        'Failed to create desktop shortcut',
-        e.toString(),
-      );
+      if (e is LauncherException) rethrow;
+      throw LauncherException('Error creating Windows shortcut', e.toString());
     }
   }
 
