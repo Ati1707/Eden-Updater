@@ -80,12 +80,6 @@ class UpdateService {
   Future<void> setCreateShortcutsPreference(bool value) =>
       _preferencesService.setCreateShortcutsPreference(value);
 
-
-
-  // Cache management
-  void clearSessionCache() => _sessionCache.clear();
-  void clearChannelCache(String channel) => _sessionCache.remove(channel);
-
   /// Get the current installed version
   Future<UpdateInfo?> getCurrentVersion() async {
     final channel = await getReleaseChannel();
@@ -1097,12 +1091,6 @@ Note: You may need to allow storage permissions for ROM loading.
 
     // Also update the regular version storage for consistency
     await _preferencesService.setCurrentVersion(channel, version);
-  }
-
-  /// Clear test version override and return to real version detection
-  Future<void> clearTestVersionOverride() async {
-    await _preferencesService.removeKey('test_version_override');
-    await _preferencesService.removeKey('test_version_channel');
   }
 
   // Constants for backward compatibility

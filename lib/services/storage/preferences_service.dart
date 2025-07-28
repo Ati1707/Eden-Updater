@@ -75,8 +75,6 @@ class PreferencesService {
     await prefs.setBool(AppConstants.createShortcutsKey, createShortcuts);
   }
 
-
-
   /// Clear stored version info for a specific channel
   Future<void> clearVersionInfo(String channel) async {
     final prefs = await _preferences;
@@ -97,54 +95,5 @@ class PreferencesService {
   Future<String?> getString(String key) async {
     final prefs = await _preferences;
     return prefs.getString(key);
-  }
-
-  /// Generic method to remove a key (for clearing test data)
-  Future<void> removeKey(String key) async {
-    final prefs = await _preferences;
-    await prefs.remove(key);
-  }
-
-  /// Debug method to get all stored preferences (for troubleshooting)
-  Future<Map<String, dynamic>> getAllPreferences() async {
-    final prefs = await _preferences;
-    final keys = prefs.getKeys();
-    final result = <String, dynamic>{};
-
-    for (final key in keys) {
-      final value = prefs.get(key);
-      result[key] = value;
-    }
-
-    return result;
-  }
-
-  /// Debug method to get all Android version-related data
-  Future<Map<String, String?>> getAndroidVersionDebugInfo() async {
-    final result = <String, String?>{};
-
-    // Check both channels
-    for (final channel in ['stable', 'nightly']) {
-      result['current_version_$channel'] = await getCurrentVersion(channel);
-      result['android_last_install_$channel'] = await getString(
-        'android_last_install_$channel',
-      );
-      result['android_install_metadata_$channel'] = await getString(
-        'android_install_metadata_$channel',
-      );
-      result['android_install_date_$channel'] = await getString(
-        'android_install_date_$channel',
-      );
-    }
-
-    result['release_channel'] = await getReleaseChannel();
-    result['android_preferred_channel'] = await getString(
-      'android_preferred_channel',
-    );
-    result['android_first_run_complete'] = await getString(
-      'android_first_run_complete',
-    );
-
-    return result;
   }
 }

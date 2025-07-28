@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 /// Warning widget displayed for nightly builds
 class NightlyWarning extends StatelessWidget {
   final bool isAutoLaunch;
-  final VoidCallback? onDismiss;
 
-  const NightlyWarning({super.key, this.isAutoLaunch = false, this.onDismiss});
+  const NightlyWarning({super.key, this.isAutoLaunch = false});
 
   @override
   Widget build(BuildContext context) {

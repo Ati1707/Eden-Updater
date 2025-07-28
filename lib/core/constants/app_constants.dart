@@ -33,19 +33,4 @@ class AppConstants {
 
   // Application Behavior
   static const bool defaultCreateShortcuts = true;
-
-  /// Get API URL for the specified channel
-  static String getApiUrl(String channel) {
-    return channel == nightlyChannel ? nightlyApiUrl : stableApiUrl;
-  }
-
-  /// Get channel display name
-  static String getChannelDisplayName(String channel) {
-    return channel == nightlyChannel ? 'Nightly' : 'Stable';
-  }
-
-  /// Get channel folder name
-  static String getChannelFolderName(String channel) {
-    return channel == nightlyChannel ? 'Eden-Nightly' : 'Eden-Release';
-  }
 }

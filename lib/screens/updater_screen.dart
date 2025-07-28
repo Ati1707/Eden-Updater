@@ -140,17 +140,7 @@ class _UpdaterScreenState extends State<UpdaterScreen> {
   }
 
   Widget _buildNightlyWarning(UpdaterState state) {
-    return Column(
-      children: [
-        NightlyWarning(
-          onDismiss: () {
-            // Warning is always visible for nightly builds in normal UI
-            // Users can switch to stable channel if they don't want to see it
-          },
-        ),
-        const SizedBox(height: 24),
-      ],
-    );
+    return Column(children: [NightlyWarning(), const SizedBox(height: 24)]);
   }
 
   Widget _buildActionsSection(BuildContext context, state) {
