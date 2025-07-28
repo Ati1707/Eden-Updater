@@ -75,23 +75,7 @@ class PreferencesService {
     await prefs.setBool(AppConstants.createShortcutsKey, createShortcuts);
   }
 
-  /// Get the portable mode preference
-  Future<bool> getPortableModePreference() async {
-    final prefs = await _preferences;
-    return prefs.getBool(AppConstants.portableModeKey) ?? false;
-  }
 
-  /// Set the portable mode preference
-  Future<void> setPortableModePreference(bool portableMode) async {
-    final prefs = await _preferences;
-    await prefs.setBool(AppConstants.portableModeKey, portableMode);
-  }
-
-  /// Clear the portable mode preference (for testing/reset)
-  Future<void> clearPortableModePreference() async {
-    final prefs = await _preferences;
-    await prefs.remove(AppConstants.portableModeKey);
-  }
 
   /// Clear stored version info for a specific channel
   Future<void> clearVersionInfo(String channel) async {

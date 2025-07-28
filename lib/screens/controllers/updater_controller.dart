@@ -44,13 +44,12 @@ class UpdaterController {
     final channelString = await _updateService.getReleaseChannel();
     final channel = ReleaseChannel.fromString(channelString);
     final createShortcuts = await _updateService.getCreateShortcutsPreference();
-    // Always set portable mode to false on startup (don't persist this setting)
 
     _updateState(
       _state.copyWith(
         releaseChannel: channel,
         createShortcuts: createShortcuts,
-        portableMode: false, // Always unchecked on boot
+        portableMode: false, // Always false on boot (session-only setting)
       ),
     );
   }
@@ -145,8 +144,7 @@ class UpdaterController {
 
   /// Update portable mode preference (session-only, not persisted)
   Future<void> updatePortableMode(bool value) async {
-    // Don't persist portable mode setting - it should always be unchecked on boot
-    // await _updateService.setPortableModePreference(value);
+    // Portable mode is session-only and always defaults to false on boot
     _updateState(_state.copyWith(portableMode: value));
   }
 

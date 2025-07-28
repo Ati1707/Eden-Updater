@@ -26,13 +26,9 @@ class AppConfig {
   static const String releaseChannelKey = 'release_channel';
   static const String edenExecutableKey = 'eden_executable_path';
   static const String createShortcutsKey = 'create_shortcuts';
-  static const String portableModeKey = 'portable_mode';
 
   // Application Behavior
-  static const bool persistPortableMode =
-      false; // Always reset portable mode on startup
   static const bool defaultCreateShortcuts = true;
-  static const String defaultChannel = stableChannel;
 
   /// Get API URL for the specified channel
   static String getApiUrl(String channel) {

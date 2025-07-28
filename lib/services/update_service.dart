@@ -80,13 +80,7 @@ class UpdateService {
   Future<void> setCreateShortcutsPreference(bool value) =>
       _preferencesService.setCreateShortcutsPreference(value);
 
-  // Portable mode preference
-  Future<bool> getPortableModePreference() =>
-      _preferencesService.getPortableModePreference();
-  Future<void> setPortableModePreference(bool value) =>
-      _preferencesService.setPortableModePreference(value);
-  Future<void> clearPortableModePreference() =>
-      _preferencesService.clearPortableModePreference();
+
 
   // Cache management
   void clearSessionCache() => _sessionCache.clear();
@@ -120,34 +114,6 @@ class UpdateService {
       } else {
         await _preferencesService.clearVersionInfo(channel);
       }
-    }
-
-    // Try to detect version from executable
-    try {
-      final installPath = await _installationService.getInstallPath();
-      final channel = await getReleaseChannel();
-      final edenExecutable = FileUtils.getEdenExecutablePath(
-        installPath,
-        channel,
-      );
-
-      if (await File(edenExecutable).exists()) {
-        final result = await Process.run(edenExecutable, ['--version']);
-        if (result.exitCode == 0) {
-          final version = result.stdout.toString().trim();
-          await _preferencesService.setCurrentVersion(channel, version);
-          return UpdateInfo(
-            version: version,
-            downloadUrl: '',
-            releaseNotes: '',
-            releaseDate: DateTime.now(),
-            fileSize: 0,
-            releaseUrl: '',
-          );
-        }
-      }
-    } catch (e) {
-      // Continue to return 'Not installed'
     }
 
     return UpdateInfo(

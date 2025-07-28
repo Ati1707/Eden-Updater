@@ -12,7 +12,6 @@ class AppConstants {
   static const String releaseChannelKey = 'release_channel';
   static const String edenExecutableKey = 'eden_executable_path';
   static const String createShortcutsKey = 'create_shortcuts';
-  static const String portableModeKey = 'portable_mode';
 
   // Release Channels
   static const String stableChannel = 'stable';
