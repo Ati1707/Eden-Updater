@@ -30,8 +30,6 @@ enum UpdateStatus {
 
   bool get isInProgress =>
       [checking, downloading, extracting, installing].contains(this);
-  bool get isCompleted => this == completed;
-  bool get isFailed => this == failed;
   bool get canStartOperation =>
       this == idle || this == completed || this == failed;
 }

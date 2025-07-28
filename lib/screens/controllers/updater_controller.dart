@@ -4,10 +4,12 @@ import '../../core/enums/app_enums.dart';
 import '../../core/utils/cleanup_utils.dart';
 import '../../services/update_service.dart';
 import '../state/updater_state.dart';
+import '../../core/services/service_locator.dart'; // Import the service locator
 
 /// Controller for managing updater operations and business logic
 class UpdaterController {
-  final UpdateService _updateService = UpdateService();
+  // Get the UpdateService from the ServiceLocator for consistency
+  final UpdateService _updateService = ServiceLocator().get<UpdateService>();
   final VoidCallback onStateChanged;
 
   UpdaterState _state = UpdaterState();
@@ -107,9 +109,9 @@ class UpdaterController {
             _state.copyWith(status: status, downloadProgress: progress),
           );
         },
-        onStatusUpdate: (status) {
-          // Status updates can be handled by the UI if needed
-        },
+        // The onStatusUpdate callback provides text status, which we aren't displaying
+        // in the UI, so we can pass an empty function here.
+        onStatusUpdate: (status) {},
       );
 
       _updateState(

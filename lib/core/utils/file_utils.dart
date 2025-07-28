@@ -68,7 +68,7 @@ class FileUtils {
     }
   }
 
-  /// Check if a directory contains Eden-related files
+  /// Check if a directory contains Eden program files (safer implementation)
   static Future<bool> containsEdenFiles(String folderPath) async {
     final dir = Directory(folderPath);
 
@@ -76,55 +76,20 @@ class FileUtils {
       if (entity is File) {
         final filename = path.basename(entity.path).toLowerCase();
 
+        // Check for the main executable
         if (isEdenExecutable(filename)) {
           return true;
         }
 
-        if (filename.contains('eden') ||
-            filename.endsWith('.nro') ||
-            filename.endsWith('.nsp') ||
-            filename.endsWith('.xci')) {
+        // Check for other characteristic files of the emulator distribution
+        if (filename.contains('eden') &&
+            (filename.contains('platforms') ||
+                filename.endsWith('.appimage'))) {
           return true;
         }
       }
     }
 
     return false;
-  }
-
-  /// Get the system architecture for Linux AppImage selection
-  static Future<String> getSystemArchitecture() async {
-    if (!Platform.isLinux) {
-      return 'unknown';
-    }
-
-    try {
-      final result = await Process.run('uname', ['-m']);
-      if (result.exitCode == 0) {
-        final arch = result.stdout.toString().trim().toLowerCase();
-
-        // Map common architecture names to AppImage naming conventions
-        switch (arch) {
-          case 'x86_64':
-          case 'amd64':
-            return 'amd64';
-          case 'aarch64':
-          case 'arm64':
-            return 'aarch64';
-          case 'armv7l':
-          case 'armv8l':
-          case 'armv9l':
-            return 'armv9';
-          default:
-            // For unknown architectures, default to amd64 (most common)
-            return 'amd64';
-        }
-      }
-    } catch (e) {
-      // If uname fails, default to amd64
-      return 'amd64';
-    }
-
-    return 'amd64';
   }
 }

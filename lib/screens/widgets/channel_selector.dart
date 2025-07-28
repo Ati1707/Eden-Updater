@@ -19,11 +19,11 @@ class ChannelSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Get available channels based on platform
+    // Get available channels based on global configuration
     final availableChannels = _getAvailableChannels();
 
-    // If only one channel is available, show a simple info widget instead of dropdown
-    if (availableChannels.length == 1) {
+    // If only one channel is available, show a simple info widget instead of a dropdown
+    if (availableChannels.length <= 1) {
       return _buildSingleChannelInfo(context, theme, availableChannels.first);
     }
 
@@ -81,17 +81,16 @@ class ChannelSelector extends StatelessWidget {
     );
   }
 
-  /// Get available channels based on platform configuration
+  /// Get available channels based on platform configuration in app_constants
   List<String> _getAvailableChannels() {
-    final channels = <String>[AppConstants.stableChannel];
+    final channels = [AppConstants.stableChannel];
+    bool isNightlySupported = true; // Default to true for desktop
 
-    // Add nightly channel only if supported on current platform
     if (Platform.isAndroid) {
-      if (AppConstants.androidSupportsNightly) {
-        channels.add(AppConstants.nightlyChannel);
-      }
-    } else {
-      // Desktop platforms support nightly
+      isNightlySupported = AppConstants.androidSupportsNightly;
+    }
+
+    if (isNightlySupported) {
       channels.add(AppConstants.nightlyChannel);
     }
 
@@ -164,14 +163,6 @@ class ChannelSelector extends StatelessWidget {
                         : theme.colorScheme.secondary,
                   ),
                 ),
-                if (Platform.isAndroid && isStable) ...[
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                  ),
-                ],
               ],
             ),
           ),

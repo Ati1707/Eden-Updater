@@ -407,13 +407,14 @@ class UpdateService {
         try {
           await _launcherService.createDesktopShortcut();
         } catch (e) {
-          // Don't fail the entire update if shortcut creation fails
+          LoggingService.error('Failed to create shortcut', e);
         }
       }
 
       onProgress(1.0);
       onStatusUpdate('Installation complete!');
     } catch (e) {
+      LoggingService.error('Update failed', e);
       if (e is AppException) {
         rethrow;
       }
@@ -581,62 +582,10 @@ class UpdateService {
         LoggingService.warning('Android Intent APK launch failed', e);
       }
 
-      // Method 2: Try FileProvider URI approach for newer Android versions
-      if (!installationInitiated && Platform.isAndroid) {
-        try {
-          final fileName = 'Eden_${updateInfo.version}.apk';
-
-          LoggingService.info('Trying FileProvider URI approach');
-
-          // Use content:// URI with FileProvider
-          final intent = AndroidIntent(
-            action: 'android.intent.action.INSTALL_PACKAGE',
-            data:
-                'content://com.eden.updater.eden_updater.fileprovider/external_downloads/$fileName',
-            flags: <int>[
-              0x10000000, // FLAG_ACTIVITY_NEW_TASK
-              0x00000001, // FLAG_GRANT_READ_URI_PERMISSION
-              0x00000002, // FLAG_GRANT_WRITE_URI_PERMISSION
-            ],
-          );
-
-          await intent.launch();
-          installationInitiated = true;
-          LoggingService.info(
-            'APK installer launched successfully via FileProvider',
-          );
-        } catch (e) {
-          LoggingService.warning('FileProvider APK launch failed', e);
-        }
-      }
-
-      // Method 3: Try simple VIEW intent as fallback
-      if (!installationInitiated && Platform.isAndroid) {
-        try {
-          final fileName = 'Eden_${updateInfo.version}.apk';
-
-          LoggingService.info('Trying simple VIEW intent');
-
-          final intent = AndroidIntent(
-            action: 'android.intent.action.VIEW',
-            data: 'file:///storage/emulated/0/Download/$fileName',
-            flags: <int>[0x10000000], // FLAG_ACTIVITY_NEW_TASK
-          );
-
-          await intent.launch();
-          installationInitiated = true;
-          LoggingService.info(
-            'APK installer launched successfully via simple VIEW intent',
-          );
-        } catch (e) {
-          LoggingService.warning('Simple VIEW intent failed', e);
-        }
-      }
-
-      // Method 4: Manual installation guidance (final fallback)
+      // Method 2: Manual installation guidance (final fallback)
       if (!installationInitiated) {
         LoggingService.info(
-          'All automatic installation methods failed, providing manual guidance',
+          'Automatic installation method failed, providing manual guidance',
         );
         final fileName = 'Eden_${updateInfo.version}.apk';
         onStatusUpdate(
@@ -645,8 +594,7 @@ class UpdateService {
           '1. Open your file manager\n'
           '2. Go to Downloads folder\n'
           '3. Tap on $fileName\n'
-          '4. Allow installation if prompted\n'
-          '5. Find Eden in your app drawer after installation',
+          '4. Allow installation if prompted',
         );
         installationInitiated = true;
       }
@@ -657,9 +605,6 @@ class UpdateService {
       await _preferencesService.setCurrentVersion(channel, updateInfo.version);
       await _storeAndroidInstallationInfo(updateInfo, channel);
 
-      // Also store in the new metadata format for better version detection
-      await _storeApkForAndroid(apkFile, updateInfo, channel, onStatusUpdate);
-
       LoggingService.info(
         'Updated version info for channel $channel to ${updateInfo.version}',
       );
@@ -667,13 +612,7 @@ class UpdateService {
       onProgress(1.0);
 
       if (installationInitiated) {
-        onStatusUpdate(
-          'APK installation initiated. Follow the prompts to complete installation, then find Eden in your app drawer.',
-        );
-      } else {
-        onStatusUpdate(
-          'APK saved to Downloads. Open your file manager, navigate to Downloads, and tap Eden_${updateInfo.version}.apk to install.',
-        );
+        onStatusUpdate('Follow system prompts to complete installation.');
       }
 
       LoggingService.info('Android APK installation completed successfully');
@@ -702,7 +641,7 @@ class UpdateService {
         'channel': channel,
         'downloadUrl': updateInfo.downloadUrl,
         'installDate': DateTime.now().toIso8601String(),
-        'fileSize': updateInfo.fileSize,
+        'fileSize': (await apkFile.length()).toString(),
       };
 
       // Save metadata to preferences for auto-update functionality
@@ -726,8 +665,6 @@ class UpdateService {
     String channel,
   ) async {
     try {
-      // Store the package name and launch intent information
-      // This would be used if we had access to the actual package info
       await _preferencesService.setString(
         'android_last_install_$channel',
         updateInfo.version,
@@ -735,13 +672,6 @@ class UpdateService {
       await _preferencesService.setString(
         'android_install_date_$channel',
         DateTime.now().toIso8601String(),
-      );
-
-      // Store channel preference for the installed APK
-      await _preferencesService.setString('android_preferred_channel', channel);
-
-      LoggingService.info(
-        'Stored Android installation info for auto-launch support',
       );
     } catch (e) {
       LoggingService.warning('Failed to store Android installation info', e);
@@ -772,9 +702,6 @@ class UpdateService {
         throw UpdateException('AppImage file not found', appImagePath);
       }
 
-      final appImageSize = await appImageFile.length();
-      LoggingService.info('AppImage file size: $appImageSize bytes');
-
       // Get install path and ensure it exists
       final installPath = await _installationService.getInstallPath();
       final installDir = Directory(installPath);
@@ -796,14 +723,12 @@ class UpdateService {
         'Target AppImage path: $targetPath (channel: $channel)',
       );
 
-      // Remove existing file if it exists
       final targetFile = File(targetPath);
       if (await targetFile.exists()) {
         LoggingService.info('Removing existing Eden executable');
         await targetFile.delete();
       }
 
-      // Copy the AppImage
       await appImageFile.copy(targetPath);
       LoggingService.info('AppImage copied successfully');
 
@@ -831,7 +756,6 @@ class UpdateService {
         'Updated version info for channel $channel to ${updateInfo.version}',
       );
 
-      // Create user folder for portable mode in the channel-specific folder
       if (portableMode) {
         onStatusUpdate('Setting up portable mode...');
         LoggingService.info('Setting up portable mode...');
@@ -844,7 +768,6 @@ class UpdateService {
 
       onProgress(0.9);
 
-      // Create shortcut if requested
       if (createShortcuts) {
         onStatusUpdate('Creating desktop shortcut...');
         try {
@@ -852,7 +775,6 @@ class UpdateService {
           LoggingService.info('Desktop shortcut created successfully');
         } catch (e) {
           LoggingService.warning('Failed to create desktop shortcut', e);
-          // Don't fail the entire installation if shortcut creation fails
         }
       }
 
@@ -892,7 +814,6 @@ class UpdateService {
     String? downloadedFilePath,
   ) async {
     try {
-      // Delete downloaded file if it exists
       if (downloadedFilePath != null) {
         final file = File(downloadedFilePath);
         if (await file.exists()) {
@@ -900,12 +821,10 @@ class UpdateService {
         }
       }
 
-      // Delete temporary directories
       if (tempDir != null && await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
 
-      // Clean up any other temp directories we might have created
       final systemTempDir = Directory.systemTemp;
       await for (final entity in systemTempDir.list()) {
         if (entity is Directory) {
@@ -915,14 +834,13 @@ class UpdateService {
             try {
               await entity.delete(recursive: true);
             } catch (e) {
-              // Ignore cleanup failures for other temp directories
+              // Ignore
             }
           }
         }
       }
     } catch (e) {
-      // Don't fail the entire update if cleanup fails
-      // Just log the error (in a real app, you might want to log this)
+      LoggingService.warning('Failed to cleanup temp files', e);
     }
   }
 
@@ -935,37 +853,6 @@ class UpdateService {
   /// Set install path
   Future<void> setInstallPath(String newPath) =>
       _preferencesService.setInstallPath(newPath);
-
-  /// Check if Android auto-update is available and needed
-  Future<bool> checkAndroidAutoUpdate() async {
-    if (!Platform.isAndroid) return false;
-
-    try {
-      final channel = await getReleaseChannel();
-      final currentVersion = await _preferencesService.getString(
-        'android_last_install_$channel',
-      );
-
-      if (currentVersion == null) {
-        LoggingService.info(
-          'No Android installation found for channel: $channel',
-        );
-        return false;
-      }
-
-      // Check for updates
-      final latestInfo = await getLatestVersion(forceRefresh: true);
-      final needsUpdate = latestInfo.version != currentVersion;
-
-      LoggingService.info(
-        'Android update check - Current: $currentVersion, Latest: ${latestInfo.version}, Needs update: $needsUpdate',
-      );
-      return needsUpdate;
-    } catch (e) {
-      LoggingService.error('Failed to check Android auto-update', e);
-      return false;
-    }
-  }
 
   /// Get Android installation metadata for a channel
   Future<Map<String, String>?> getAndroidInstallationMetadata(
@@ -991,109 +878,13 @@ class UpdateService {
     }
   }
 
-  /// Launch Eden on Android (delegates to launcher service)
-  Future<bool> launchEdenAndroid() async {
-    if (!Platform.isAndroid) return false;
-
-    try {
-      await _launcherService.launchEden();
-      return true;
-    } catch (e) {
-      LoggingService.error('Failed to launch Eden Android', e);
-      return false;
-    }
-  }
-
-  /// Enhanced Android APK installation with better user guidance
-  Future<void> installAndroidApkWithGuidance(
-    UpdateInfo updateInfo, {
-    required Function(double) onProgress,
-    required Function(String) onStatusUpdate,
-  }) async {
-    onStatusUpdate('Preparing Android installation...');
-    onProgress(0.1);
-
-    // Provide user guidance for Android installation
-    onStatusUpdate(
-      'Android Installation Guide:\n'
-      '1. Enable "Install from Unknown Sources" in Settings\n'
-      '2. Allow installation when prompted\n'
-      '3. Eden will appear in your app drawer after installation',
-    );
-
-    await Future.delayed(const Duration(seconds: 2)); // Give user time to read
-
-    // Proceed with normal APK installation
-    await downloadUpdate(
-      updateInfo,
-      createShortcuts: false, // Not applicable on Android
-      portableMode: false, // Not applicable on Android
-      onProgress: onProgress,
-      onStatusUpdate: onStatusUpdate,
-    );
-  }
-
-  /// Check if this is the first run on Android and provide setup guidance
-  Future<bool> isAndroidFirstRun() async {
-    if (!Platform.isAndroid) return false;
-
-    final hasRunBefore = await _preferencesService.getString(
-      'android_first_run_complete',
-    );
-    return hasRunBefore == null;
-  }
-
-  /// Mark Android first run as complete
-  Future<void> markAndroidFirstRunComplete() async {
-    if (Platform.isAndroid) {
-      await _preferencesService.setString('android_first_run_complete', 'true');
-      await _preferencesService.setString(
-        'android_setup_date',
-        DateTime.now().toIso8601String(),
-      );
-    }
-  }
-
-  /// Get Android-specific installation instructions
-  String getAndroidInstallationInstructions() {
-    return '''
-Android Installation Instructions:
-
-1. ENABLE UNKNOWN SOURCES:
-   • Go to Settings > Security (or Privacy)
-   • Enable "Install from Unknown Sources" or "Allow from this source"
-
-2. INSTALL THE APK:
-   • Tap the downloaded APK file
-   • Follow the installation prompts
-   • Grant any requested permissions
-
-3. LAUNCH EDEN:
-   • Find "Eden" in your app drawer
-   • Tap to launch the emulator
-
-4. AUTO-UPDATES:
-   • Keep this updater app installed
-   • It will notify you of new Eden versions
-   • Updates will download automatically
-
-Note: You may need to allow storage permissions for ROM loading.
-''';
-  }
-
   /// Debug method to manually set version for testing
   Future<void> setCurrentVersionForTesting(String version) async {
     final channel = await getReleaseChannel();
 
-    // Set a special test version flag that overrides all other version detection
     await _preferencesService.setString('test_version_override', version);
     await _preferencesService.setString('test_version_channel', channel);
 
-    // Also update the regular version storage for consistency
     await _preferencesService.setCurrentVersion(channel, version);
   }
-
-  // Constants for backward compatibility
-  static const String stableChannel = AppConstants.stableChannel;
-  static const String nightlyChannel = AppConstants.nightlyChannel;
 }

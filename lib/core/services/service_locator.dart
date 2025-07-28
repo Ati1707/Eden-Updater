@@ -28,9 +28,6 @@ class ServiceLocator {
     return service as T;
   }
 
-  /// Check if a service is registered
-  bool isRegistered<T>() => _services.containsKey(T);
-
   /// Initialize all services
   static void initialize() {
     final locator = ServiceLocator();
@@ -63,10 +60,5 @@ class ServiceLocator {
         locator.get<LauncherService>(),
       ),
     );
-  }
-
-  /// Clear all services (useful for testing)
-  void clear() {
-    _services.clear();
   }
 }

@@ -11,6 +11,7 @@ error.txt
 output.txt
 acli.exe
 token.txt
+/lib/dart_files_as_txt
 
 # Flutter repo-specific
 /bin/cache/
