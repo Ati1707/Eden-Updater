@@ -1,4 +1,4 @@
-import '../../core/config/app_config.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/enums/app_enums.dart';
 import '../../models/update_info.dart';
 
@@ -26,7 +26,7 @@ class UpdaterState {
     this.status = UpdateStatus.idle,
     this.downloadProgress = 0.0,
     this.releaseChannel = ReleaseChannel.stable,
-    this.createShortcuts = AppConfig.defaultCreateShortcuts,
+    this.createShortcuts = AppConstants.defaultCreateShortcuts,
     this.portableMode = false, // Always false by default
     this.autoLaunchInProgress = false,
   });
