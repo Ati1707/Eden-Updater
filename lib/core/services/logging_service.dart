@@ -1,224 +1,131 @@
 import 'dart:io';
-import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
-/// Centralized logging service for the Eden Updater application
-/// Provides structured logging with file output for debugging and error tracking
+/// A simple, lightweight logging service with log rotation.
 class LoggingService {
-  static LoggingService? _instance;
-  static Logger? _logger;
-  static File? _logFile;
+static IOSink? _logSink;
+static String? _logFilePath;
+static bool _initialized = false;
+static const int _maxLogFiles = 3;
 
-  LoggingService._();
+// Private constructor to prevent instantiation
+LoggingService._();
 
-  /// Get the singleton instance of LoggingService
-  static LoggingService get instance {
-    _instance ??= LoggingService._();
-    return _instance!;
-  }
+/// Initializes the logging service.
+/// Call this once at application startup.
+static Future<void> initialize() async {
+if (_initialized) return;
 
-  /// Initialize the logging service
-  /// Should be called early in the application lifecycle
-  static Future<void> initialize() async {
-    if (_logger != null) return; // Already initialized
-
-    try {
-      Directory logsDir;
-
-      if (Platform.isAndroid) {
-        // On Android, use external storage if available, otherwise internal
-        Directory appDir;
-        try {
-          appDir =
-              await getExternalStorageDirectory() ??
-              await getApplicationDocumentsDirectory();
-        } catch (e) {
-          appDir = await getApplicationDocumentsDirectory();
-        }
-        logsDir = Directory(path.join(appDir.path, 'eden_updater_logs'));
-      } else {
-        // On Windows/Linux, use a logs folder next to the executable
-        final executablePath = Platform.resolvedExecutable;
-        final executableDir = path.dirname(executablePath);
-        logsDir = Directory(path.join(executableDir, 'logs'));
-      }
-
-      await logsDir.create(recursive: true);
-
-      // Create log file with timestamp
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      _logFile = File(path.join(logsDir.path, 'eden_updater_$timestamp.log'));
-
-      // Create logger with custom output
-      _logger = Logger(
-        printer: PrettyPrinter(
-          methodCount: 2,
-          errorMethodCount: 8,
-          lineLength: 120,
-          colors: false, // Disable colors for file output
-          printEmojis: false,
-          dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
-        ),
-        output: MultiOutput([
-          ConsoleOutput(), // Still log to console for debugging
-          FileOutput(file: _logFile!), // Log to file for persistence
-        ]),
-        level: Level.debug, // Log everything in debug builds
-      );
-
-      // Log initialization
-      _logger!.i('Eden Updater logging initialized');
-      _logger!.i('Platform: ${Platform.operatingSystem}');
-      _logger!.i('Log file: ${_logFile!.path}');
-
-      // Clean up old log files (keep only last 10)
-      await _cleanupOldLogs(logsDir);
-    } catch (e) {
-      // Fallback to console-only logging if file logging fails
-
-      _logger = Logger(
-        printer: PrettyPrinter(
-          methodCount: 2,
-          errorMethodCount: 8,
-          lineLength: 120,
-          colors: true,
-          printEmojis: true,
-          dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
-        ),
-        level: Level.debug,
-      );
-      _logger!.w('Failed to initialize file logging, using console only: $e');
-    }
-  }
-
-  /// Clean up old log files, keeping only the most recent ones
-  static Future<void> _cleanupOldLogs(Directory logsDir) async {
-    try {
-      final logFiles = await logsDir
-          .list()
-          .where(
-            (entity) =>
-                entity is File &&
-                entity.path.endsWith('.log') &&
-                path.basename(entity.path).startsWith('eden_updater_'),
-          )
-          .cast<File>()
-          .toList();
-
-      // Sort by modification time (newest first)
-      logFiles.sort(
-        (a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()),
-      );
-
-      // Delete old files (keep only 10 most recent)
-      if (logFiles.length > 10) {
-        for (int i = 10; i < logFiles.length; i++) {
-          try {
-            await logFiles[i].delete();
-          } catch (e) {
-            // Ignore deletion errors
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore cleanup errors
-    }
-  }
-
-  /// Log debug message
-  static void debug(String message, [dynamic error, StackTrace? stackTrace]) {
-    _logger?.d(message, error: error, stackTrace: stackTrace);
-  }
-
-  /// Log info message
-  static void info(String message, [dynamic error, StackTrace? stackTrace]) {
-    _logger?.i(message, error: error, stackTrace: stackTrace);
-  }
-
-  /// Log warning message
-  static void warning(String message, [dynamic error, StackTrace? stackTrace]) {
-    _logger?.w(message, error: error, stackTrace: stackTrace);
-  }
-
-  /// Log error message
-  static void error(String message, [dynamic error, StackTrace? stackTrace]) {
-    _logger?.e(message, error: error, stackTrace: stackTrace);
-  }
-
-  /// Log fatal error message
-  static void fatal(String message, [dynamic error, StackTrace? stackTrace]) {
-    _logger?.f(message, error: error, stackTrace: stackTrace);
-  }
-
-  /// Get the current log file path (if available)
-  static String? get logFilePath => _logFile?.path;
-
-  /// Get logs directory path
-  static Future<String?> getLogsDirectory() async {
-    try {
-      if (Platform.isAndroid) {
-        Directory appDir;
-        try {
-          appDir =
-              await getExternalStorageDirectory() ??
-              await getApplicationDocumentsDirectory();
-        } catch (e) {
-          appDir = await getApplicationDocumentsDirectory();
-        }
-        return path.join(appDir.path, 'eden_updater_logs');
-      } else {
-        // On Windows/Linux, use logs folder next to executable
-        final executablePath = Platform.resolvedExecutable;
-        final executableDir = path.dirname(executablePath);
-        return path.join(executableDir, 'logs');
-      }
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Get list of available log files
-  static Future<List<File>> getLogFiles() async {
-    try {
-      final logsDir = await getLogsDirectory();
-      if (logsDir == null) return [];
-
-      final dir = Directory(logsDir);
-      if (!await dir.exists()) return [];
-
-      return await dir
-          .list()
-          .where(
-            (entity) =>
-                entity is File &&
-                entity.path.endsWith('.log') &&
-                path.basename(entity.path).startsWith('eden_updater_'),
-          )
-          .cast<File>()
-          .toList();
-    } catch (e) {
-      return [];
-    }
-  }
+try {
+// Use a "logs" subfolder within the app's documents directory.
+final directory = await getApplicationDocumentsDirectory();
+final logDir = Directory(path.join("${directory.path}/Eden", 'logs'));
+if (!await logDir.exists()) {
+await logDir.create(recursive: true);
 }
 
-/// Custom file output for logger
-class FileOutput extends LogOutput {
-  final File file;
+// Clean up old log files before creating a new one.
+await _cleanupOldLogs(logDir);
 
-  FileOutput({required this.file});
+// Create a new log file with the current date.
+final date = DateTime.now();
+final dateString = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}::${date.hour.toString().padLeft(2, '0')}";
+_logFilePath = path.join(logDir.path, 'eden_updater_$dateString.log');
+final logFile = File(_logFilePath!);
 
-  @override
-  void output(OutputEvent event) {
-    try {
-      final buffer = StringBuffer();
-      for (final line in event.lines) {
-        buffer.writeln(line);
-      }
-      file.writeAsStringSync(buffer.toString(), mode: FileMode.append);
-    } catch (e) {
-      // Debug: print file write errors
-    }
-  }
+_logSink = logFile.openWrite(mode: FileMode.append);
+_initialized = true;
+
+_log('INFO', '--- Logging Initialized ---');
+_log('INFO', 'Platform: ${Platform.operatingSystem} ${Platform.version}');
+_log('INFO', 'Log file: $_logFilePath');
+
+} catch (e) {
+// If file logging fails, fall back to console-only.
+_logSink = null;
+}
+}
+
+/// Clean up old log files, keeping only the most recent ones.
+static Future<void> _cleanupOldLogs(Directory logDir) async {
+try {
+// Use async list() and filter the stream.
+final logFiles = await logDir.list()
+    .where((entity) => entity is File && path.basename(entity.path).startsWith('eden_updater_') && entity.path.endsWith('.log'))
+    .cast<File>()
+    .toList();
+
+// Sort by modification date, oldest first.
+logFiles.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+
+// If we are at or above the max number of files, delete the oldest ones.
+// We check for ">=" because we are about to create a new file.
+if (logFiles.length >= _maxLogFiles) {
+// We want to end up with (_maxLogFiles - 1) files before creating the new one.
+final filesToDeleteCount = logFiles.length - (_maxLogFiles - 1);
+for (int i = 0; i < filesToDeleteCount; i++) {
+await logFiles[i].delete();
+}
+}
+} catch (e) {
+// Ignore cleanup errors, not critical.
+}
+}
+
+/// Closes the log file sink. Good to call on app exit if possible.
+static Future<void> dispose() async {
+await _logSink?.flush();
+await _logSink?.close();
+}
+
+static void info(String message) => _log('INFO', message);
+static void debug(String message) => _log('DEBUG', message);
+static void warning(String message, [dynamic error, StackTrace? stackTrace]) => _log('WARN', message, error, stackTrace);
+static void error(String message, [dynamic error, StackTrace? stackTrace]) => _log('ERROR', message, error, stackTrace);
+static void fatal(String message, [dynamic error, StackTrace? stackTrace]) => _log('FATAL', message, error, stackTrace);
+
+/// Internal log handler.
+static void _log(String level, String message, [dynamic error, StackTrace? stackTrace]) {
+final timestamp = DateTime.now().toIso8601String();
+final logMessage = '[$timestamp] [$level] $message';
+
+// Always print to console for live debugging.
+
+// Write to the file sink if it's available.
+_logSink?.writeln(logMessage);
+
+if (error != null) {
+final errorMessage = '  Error: $error';
+_logSink?.writeln(errorMessage);
+}
+if (stackTrace != null) {
+final stackTraceMessage = '  Stack Trace:\n$stackTrace';
+_logSink?.writeln(stackTraceMessage);
+}
+}
+
+/// Gets a list of available log files, sorted newest first.
+static Future<List<File>> getLogFiles() async {
+try {
+final directory = await getApplicationDocumentsDirectory();
+final logDir = Directory(path.join("${directory.path}/Eden", 'logs'));
+if (!await logDir.exists()) return [];
+
+// Correctly filter the stream before collecting to a list.
+final files = await logDir.list()
+    .where((entity) => entity is File && path.basename(entity.path).startsWith('eden_updater_') && entity.path.endsWith('.log'))
+    .cast<File>()
+    .toList();
+
+// Sort newest first for the UI.
+files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+return files;
+} catch (e) {
+return [];
+}
+}
+
+/// Get the current log file path.
+static String? get logFilePath => _logFilePath;
 }
