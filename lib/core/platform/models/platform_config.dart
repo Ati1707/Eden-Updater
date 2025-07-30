@@ -25,7 +25,6 @@ class PlatformConfig {
 
   final List<bool Function(String)> assetSearchPatterns;
   final String defaultArchitecture;
-  final bool nightlyChannelAvailable;
   final Map<String, bool> featureFlags;
   final Map<String, dynamic> platformSpecificConfig;
 
@@ -39,7 +38,6 @@ class PlatformConfig {
     required this.defaultInstallationDir,
     required this.assetSearchPatterns,
     required this.defaultArchitecture,
-    required this.nightlyChannelAvailable,
     required this.featureFlags,
     required this.platformSpecificConfig,
   });
@@ -55,7 +53,6 @@ class PlatformConfig {
     defaultInstallationDir: 'Eden',
     assetSearchPatterns: _getWindowsAssetPatterns(),
     defaultArchitecture: 'amd64',
-    nightlyChannelAvailable: true,
     featureFlags: const {
       'supportsShortcutCreation': true,
       'supportsPortableInstallation': true,
@@ -84,7 +81,6 @@ class PlatformConfig {
     defaultInstallationDir: 'Eden',
     assetSearchPatterns: _getLinuxAssetPatterns(),
     defaultArchitecture: 'amd64',
-    nightlyChannelAvailable: true,
     featureFlags: const {
       'supportsShortcutCreation': true,
       'supportsPortableInstallation':
@@ -108,15 +104,13 @@ class PlatformConfig {
     supportedFileExtensions: const ['.apk'],
     supportedChannels: const [
       'stable',
-      'nightly',
-    ], // Both channels supported, availability checked at runtime
+    ], // Only stable channel supported on Android - nightly doesn't have Android builds
     supportsShortcuts: false,
     supportsPortableMode: false,
     requiresExecutablePermissions: false,
     defaultInstallationDir: '', // Not applicable for Android
     assetSearchPatterns: _getAndroidAssetPatterns(),
     defaultArchitecture: 'arm64',
-    nightlyChannelAvailable: false, // Currently disabled for Android
     featureFlags: const {
       'supportsShortcutCreation': false,
       'supportsPortableInstallation': false,
@@ -142,7 +136,6 @@ class PlatformConfig {
     defaultInstallationDir: 'Eden',
     assetSearchPatterns: _getMacOSAssetPatterns(),
     defaultArchitecture: 'amd64',
-    nightlyChannelAvailable: true,
     featureFlags: const {
       'supportsShortcutCreation': true,
       'supportsPortableInstallation': true,

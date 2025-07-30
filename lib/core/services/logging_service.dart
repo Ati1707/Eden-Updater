@@ -19,6 +19,7 @@ class LoggingService {
 
     try {
       // Use a "logs" subfolder within the app's documents directory.
+      // On Android, this will be in the app's private external storage
       final directory = await getApplicationDocumentsDirectory();
       final logDir = Directory(path.join(directory.path, 'Eden', 'logs'));
       if (!await logDir.exists()) {
@@ -53,12 +54,7 @@ class LoggingService {
       // Use async list() and filter the stream.
       final logFiles = await logDir
           .list()
-          .where(
-            (entity) =>
-                entity is File &&
-                path.basename(entity.path).startsWith('eden_updater_') &&
-                entity.path.endsWith('.log'),
-          )
+          .where((entity) => entity is File && entity.path.endsWith('.log'))
           .cast<File>()
           .toList();
 
@@ -129,19 +125,35 @@ class LoggingService {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final logDir = Directory(path.join(directory.path, 'Eden', 'logs'));
-      if (!await logDir.exists()) return [];
+
+      // Debug logging for Android troubleshooting
+      print('[LoggingService] Documents directory: ${directory.path}');
+      print('[LoggingService] Log directory: ${logDir.path}');
+      print('[LoggingService] Log directory exists: ${await logDir.exists()}');
+
+      if (!await logDir.exists()) {
+        print(
+          '[LoggingService] Log directory does not exist, returning empty list',
+        );
+        return [];
+      }
+
+      // List all files in the directory for debugging
+      final allEntities = await logDir.list().toList();
+      print(
+        '[LoggingService] All entities in log directory: ${allEntities.map((e) => path.basename(e.path)).toList()}',
+      );
 
       // Correctly filter the stream before collecting to a list.
       final files = await logDir
           .list()
-          .where(
-            (entity) =>
-                entity is File &&
-                path.basename(entity.path).startsWith('eden_updater_') &&
-                entity.path.endsWith('.log'),
-          )
+          .where((entity) => entity is File && entity.path.endsWith('.log'))
           .cast<File>()
           .toList();
+
+      print(
+        '[LoggingService] Found ${files.length} log files: ${files.map((f) => path.basename(f.path)).toList()}',
+      );
 
       // Sort newest first for the UI.
       files.sort(
@@ -149,6 +161,7 @@ class LoggingService {
       );
       return files;
     } catch (e) {
+      print('[LoggingService] Error getting log files: $e');
       return [];
     }
   }

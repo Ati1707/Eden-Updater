@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 import '../../../../models/update_info.dart';
 import '../../../services/logging_service.dart';
@@ -170,17 +171,27 @@ class AndroidInstaller implements IPlatformInstaller {
       LoggingService.debug('[Android] APK file path: $filePath');
       onProgress(0.5);
 
+      // First, copy the APK to a location accessible by FileProvider
+      final String accessiblePath = await _prepareApkForInstallation(filePath);
+      LoggingService.debug('[Android] Accessible APK path: $accessiblePath');
+
       // Try multiple intent approaches for better compatibility
       bool launched = false;
 
-      // Method 1: Standard APK installation intent
+      // Method 1: Content URI with FileProvider (Android 7.0+)
       LoggingService.debug(
-        '[Android] Attempting Method 1: Standard APK installation intent',
+        '[Android] Attempting Method 1: Content URI with FileProvider',
       );
       try {
+        final packageName = await _getPackageName();
+        final contentUri =
+            'content://$packageName.fileprovider/cache/${path.basename(accessiblePath)}';
+
+        LoggingService.debug('[Android] Content URI: $contentUri');
+
         final intent = AndroidIntent(
           action: 'android.intent.action.VIEW',
-          data: 'file://$filePath',
+          data: contentUri,
           type: 'application/vnd.android.package-archive',
           flags: [
             0x10000000, // FLAG_ACTIVITY_NEW_TASK
@@ -193,22 +204,51 @@ class AndroidInstaller implements IPlatformInstaller {
 
         await intent.launch();
         launched = true;
-        LoggingService.info(
-          '[Android] APK installer launched via standard intent',
-        );
+        LoggingService.info('[Android] APK installer launched via content URI');
       } catch (e) {
-        LoggingService.warning('[Android] Standard APK intent failed: $e');
+        LoggingService.warning('[Android] Content URI intent failed: $e');
       }
 
-      // Method 2: Alternative intent with different flags
+      // Method 2: Standard APK installation intent with file URI (fallback)
       if (!launched) {
         LoggingService.debug(
-          '[Android] Attempting Method 2: Alternative intent with different flags',
+          '[Android] Attempting Method 2: Standard APK installation intent with file URI',
         );
         try {
           final intent = AndroidIntent(
+            action: 'android.intent.action.VIEW',
+            data: 'file://$accessiblePath',
+            type: 'application/vnd.android.package-archive',
+            flags: [
+              0x10000000, // FLAG_ACTIVITY_NEW_TASK
+              0x00000001, // FLAG_GRANT_READ_URI_PERMISSION
+            ],
+          );
+
+          onStatusUpdate('Trying file URI installer...');
+          onProgress(0.75);
+
+          await intent.launch();
+          launched = true;
+          LoggingService.info('[Android] APK installer launched via file URI');
+        } catch (e) {
+          LoggingService.warning('[Android] File URI intent failed: $e');
+        }
+      }
+
+      // Method 3: Alternative intent with INSTALL_PACKAGE action
+      if (!launched) {
+        LoggingService.debug(
+          '[Android] Attempting Method 3: INSTALL_PACKAGE action',
+        );
+        try {
+          final packageName = await _getPackageName();
+          final contentUri =
+              'content://$packageName.fileprovider/cache/${path.basename(accessiblePath)}';
+
+          final intent = AndroidIntent(
             action: 'android.intent.action.INSTALL_PACKAGE',
-            data: 'file://$filePath',
+            data: contentUri,
             type: 'application/vnd.android.package-archive',
             flags: [
               0x10000000, // FLAG_ACTIVITY_NEW_TASK
@@ -223,22 +263,22 @@ class AndroidInstaller implements IPlatformInstaller {
           await intent.launch();
           launched = true;
           LoggingService.info(
-            '[Android] APK installer launched via alternative intent',
+            '[Android] APK installer launched via INSTALL_PACKAGE action',
           );
         } catch (e) {
-          LoggingService.warning('[Android] Alternative APK intent failed: $e');
+          LoggingService.warning('[Android] INSTALL_PACKAGE intent failed: $e');
         }
       }
 
-      // Method 3: Generic file viewer intent
+      // Method 4: Generic file viewer intent (last resort)
       if (!launched) {
         LoggingService.debug(
-          '[Android] Attempting Method 3: Generic file viewer intent',
+          '[Android] Attempting Method 4: Generic file viewer intent',
         );
         try {
           final intent = AndroidIntent(
             action: 'android.intent.action.VIEW',
-            data: 'file://$filePath',
+            data: 'file://$accessiblePath',
             flags: [0x10000000], // FLAG_ACTIVITY_NEW_TASK
           );
 
@@ -260,7 +300,7 @@ class AndroidInstaller implements IPlatformInstaller {
         throw PlatformOperationException(
           'Android',
           'installApk',
-          'All APK installation methods failed. Please install the APK manually from: $filePath',
+          'All APK installation methods failed. Please install the APK manually from: $accessiblePath',
         );
       }
 
@@ -279,5 +319,50 @@ class AndroidInstaller implements IPlatformInstaller {
         'Failed to launch APK installer: $e',
       );
     }
+  }
+
+  /// Prepares the APK file for installation by copying it to an accessible location
+  Future<String> _prepareApkForInstallation(String originalPath) async {
+    try {
+      LoggingService.debug('[Android] Preparing APK for installation');
+
+      // Get the cache directory (accessible by FileProvider)
+      final Directory cacheDir = await getTemporaryDirectory();
+
+      final String fileName = path.basename(originalPath);
+      final String targetPath = path.join(cacheDir.path, fileName);
+
+      LoggingService.debug(
+        '[Android] Copying APK from $originalPath to $targetPath',
+      );
+
+      // Copy the file to the accessible location
+      final File originalFile = File(originalPath);
+      final File targetFile = File(targetPath);
+
+      // Ensure the target directory exists
+      await targetFile.parent.create(recursive: true);
+
+      // Copy the file
+      await originalFile.copy(targetPath);
+
+      LoggingService.info(
+        '[Android] APK copied to accessible location: $targetPath',
+      );
+      return targetPath;
+    } catch (e) {
+      LoggingService.error(
+        '[Android] Failed to prepare APK for installation: $e',
+      );
+      // If copying fails, return the original path as fallback
+      return originalPath;
+    }
+  }
+
+  /// Gets the current package name for FileProvider authority
+  Future<String> _getPackageName() async {
+    // For Flutter apps, we can use a hardcoded package name since it's defined in build.gradle
+    // In a more dynamic implementation, this could be retrieved from platform channels
+    return 'com.eden.updater.eden_updater';
   }
 }

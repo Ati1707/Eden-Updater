@@ -60,7 +60,8 @@ class AppConstants {
   /// Gets whether nightly channel is available on current platform
   static bool get nightlyChannelAvailable {
     try {
-      return PlatformFactory.getCurrentPlatformConfig().nightlyChannelAvailable;
+      return PlatformFactory.getCurrentPlatformConfig().supportedChannels
+          .contains(nightlyChannel);
     } catch (e) {
       return false; // Fallback to false for safety
     }
