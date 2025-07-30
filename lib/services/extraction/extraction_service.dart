@@ -2,12 +2,17 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
 import '../../core/errors/app_exceptions.dart';
-import '../../core/utils/file_utils.dart';
 import '../../core/services/logging_service.dart';
+import '../../core/platform/interfaces/i_platform_file_handler.dart';
+import '../../core/platform/platform_factory.dart';
 
-/// Service for extracting archive files
 class ExtractionService {
-  /// Extract an archive file to a destination directory
+  final IPlatformFileHandler _platformFileHandler;
+
+  ExtractionService([IPlatformFileHandler? platformFileHandler])
+    : _platformFileHandler =
+          platformFileHandler ?? PlatformFactory.createFileHandler();
+
   Future<void> extractArchive(
     String archivePath,
     String destinationPath, {
@@ -87,9 +92,9 @@ class ExtractionService {
           LoggingService.info(
             'File appears to be a ZIP/APK based on signature',
           );
-          if (Platform.isAndroid) {
+          final platformInfo = PlatformFactory.getPlatformInfo();
+          if (platformInfo['platformName'] == 'Android') {
             LoggingService.info('Treating as APK file on Android platform');
-            // This should be handled by the update service, not here
             throw ExtractionException(
               'APK file detected but not handled properly',
               'This appears to be an APK file that should be installed directly on Android',
@@ -125,10 +130,18 @@ class ExtractionService {
             onProgress(extractedFiles / totalFiles);
           }
 
-          // Make executable if it's an Eden executable on Linux
-          if (Platform.isLinux && FileUtils.isEdenExecutable(file.name)) {
+          // Make executable if it's an Eden executable (platform-specific)
+          if (_platformFileHandler.isEdenExecutable(file.name)) {
             LoggingService.debug('Making file executable: ${file.name}');
-            await Process.run('chmod', ['+x', extractPath]);
+            try {
+              await _platformFileHandler.makeExecutable(extractPath);
+            } catch (e) {
+              LoggingService.warning(
+                'Failed to make file executable: ${file.name}',
+                e,
+              );
+              // Continue extraction even if chmod fails
+            }
           }
         }
       }
@@ -142,7 +155,6 @@ class ExtractionService {
     }
   }
 
-  /// Extract 7z archives using system 7z command
   Future<void> _extract7z(
     String archivePath,
     String destinationPath, {
@@ -150,7 +162,8 @@ class ExtractionService {
   }) async {
     try {
       ProcessResult result;
-      if (Platform.isWindows) {
+      final platformInfo = PlatformFactory.getPlatformInfo();
+      if (platformInfo['platformName'] == 'Windows') {
         final sevenZipPaths = [
           'C:\\Program Files\\7-Zip\\7z.exe',
           'C:\\Program Files (x86)\\7-Zip\\7z.exe',
@@ -199,11 +212,14 @@ class ExtractionService {
       // Fall through to throw exception
     }
 
+    final platformInfo = PlatformFactory.getPlatformInfo();
+    final installInstructions = platformInfo['platformName'] == 'Windows'
+        ? 'Windows: Download from https://www.7-zip.org/'
+        : 'Linux: sudo apt install p7zip-full';
+
     throw ExtractionException(
       '7z extraction failed',
-      'Please install 7-Zip:\n'
-          'Windows: Download from https://www.7-zip.org/\n'
-          'Linux: sudo apt install p7zip-full',
+      'Please install 7-Zip:\n$installInstructions',
     );
   }
 }

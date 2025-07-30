@@ -1,9 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 
-/// Utility functions for cleaning up old files and directories
 class CleanupUtils {
-  /// Clean up old downloads folders from previous versions
   static Future<void> cleanupOldDownloads(String installPath) async {
     try {
       final downloadsPath = path.join(installPath, 'downloads');

@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../core/platform/platform_factory.dart';
 
 /// Widget for displaying and managing user settings/preferences
 class SettingsSection extends StatelessWidget {
@@ -20,27 +20,30 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Hide entire settings section on Android since no options are applicable
-    if (Platform.isAndroid) {
+    final platformConfig = PlatformFactory.getCurrentPlatformConfig();
+    final theme = Theme.of(context);
+
+    // Hide entire settings section if no platform features are supported
+    if (!platformConfig.supportsShortcuts &&
+        !platformConfig.supportsPortableMode) {
       return const SizedBox.shrink();
     }
-
-    final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Create shortcuts checkbox (Windows and Linux)
-        _buildCheckboxRow(
-          theme: theme,
-          value: createShortcuts,
-          label: 'Create desktop shortcut',
-          onChanged: isEnabled ? onCreateShortcutsChanged : null,
-        ),
+        // Create shortcuts checkbox (if supported by platform)
+        if (platformConfig.supportsShortcuts)
+          _buildCheckboxRow(
+            theme: theme,
+            value: createShortcuts,
+            label: 'Create desktop shortcut',
+            onChanged: isEnabled ? onCreateShortcutsChanged : null,
+          ),
 
-        // Portable mode checkbox (Windows only)
-        if (Platform.isWindows) ...[
-          const SizedBox(height: 8),
+        // Portable mode checkbox (if supported by platform)
+        if (platformConfig.supportsPortableMode) ...[
+          if (platformConfig.supportsShortcuts) const SizedBox(height: 8),
           _buildCheckboxRow(
             theme: theme,
             value: portableMode,

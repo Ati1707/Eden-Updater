@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/platform/platform_factory.dart';
 
 /// Widget for selecting release channel
 class ChannelSelector extends StatelessWidget {
@@ -81,20 +81,8 @@ class ChannelSelector extends StatelessWidget {
     );
   }
 
-  /// Get available channels based on platform configuration in app_constants
   List<String> _getAvailableChannels() {
-    final channels = [AppConstants.stableChannel];
-    bool isNightlySupported = true; // Default to true for desktop
-
-    if (Platform.isAndroid) {
-      isNightlySupported = AppConstants.androidSupportsNightly;
-    }
-
-    if (isNightlySupported) {
-      channels.add(AppConstants.nightlyChannel);
-    }
-
-    return channels;
+    return PlatformFactory.getSupportedChannels();
   }
 
   /// Build a single channel info widget when only one channel is available

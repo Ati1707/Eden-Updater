@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/platform/platform_factory.dart';
+import '../../core/utils/url_launcher_utils.dart';
 import 'logs_dialog.dart';
 
 /// Header widget for the updater screen
@@ -104,8 +104,9 @@ class AppHeader extends StatelessWidget {
                 ),
               if (kDebugMode && onTestVersion != null)
                 const SizedBox(height: 8),
-              // Logs button (always visible on Android for debugging)
-              if (Platform.isAndroid) ...[
+              // Logs button (visible on Android for debugging)
+              if (PlatformFactory.getCurrentPlatformConfig().name ==
+                  'Android') ...[
                 Container(
                   decoration: BoxDecoration(
                     color: theme.colorScheme.secondary.withValues(alpha: 0.2),
@@ -128,7 +129,7 @@ class AppHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: IconButton(
-                  onPressed: () => _openGitHub(releaseChannel),
+                  onPressed: () => _openGitHub(context, releaseChannel),
                   icon: Icon(
                     Icons.open_in_new,
                     color: theme.colorScheme.primary,
@@ -143,14 +144,28 @@ class AppHeader extends StatelessWidget {
     );
   }
 
-  Future<void> _openGitHub(String channel) async {
-    final uri = Uri.parse(
-      channel == AppConstants.nightlyChannel
-          ? 'https://github.com/pflyly/eden-nightly/releases'
-          : 'https://github.com/eden-emulator/Releases/releases',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+  Future<void> _openGitHub(BuildContext context, String channel) async {
+    final url = channel == AppConstants.nightlyChannel
+        ? 'https://github.com/pflyly/eden-nightly/releases'
+        : 'https://github.com/eden-emulator/Releases/releases';
+
+    final success = await UrlLauncherUtils.launchUrlRobust(url);
+    if (!success) {
+      // Fallback: copy URL to clipboard and show feedback
+      await UrlLauncherUtils.copyUrlToClipboard(url);
+
+      // Show snackbar to inform user
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not open browser. GitHub URL copied to clipboard.',
+            ),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Theme.of(context).colorScheme.inverseSurface,
+          ),
+        );
+      }
     }
   }
 

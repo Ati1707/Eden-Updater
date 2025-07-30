@@ -5,9 +5,7 @@ import '../../core/errors/app_exceptions.dart';
 import '../../core/services/logging_service.dart';
 import '../../models/update_info.dart';
 
-/// Service for interacting with GitHub API
 class GitHubApiService {
-  /// Fetch the latest release information from GitHub
   Future<UpdateInfo> getLatestRelease(String channel) async {
     final apiUrl = channel == AppConstants.nightlyChannel
         ? AppConstants.nightlyApiUrl

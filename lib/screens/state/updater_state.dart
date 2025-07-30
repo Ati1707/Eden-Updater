@@ -20,51 +20,38 @@ class UpdaterState {
   // Auto-launch state
   final bool autoLaunchInProgress;
 
-  const UpdaterState({
+  UpdaterState({
     this.currentVersion,
     this.latestVersion,
     this.status = UpdateStatus.idle,
     this.downloadProgress = 0.0,
     this.releaseChannel = ReleaseChannel.stable,
-    this.createShortcuts = AppConstants.defaultCreateShortcuts,
+    bool? createShortcuts,
     this.portableMode = false, // Always false by default
     this.autoLaunchInProgress = false,
-  });
+  }) : createShortcuts = createShortcuts ?? AppConstants.defaultCreateShortcuts;
 
-  /// Computed properties for better readability
-
-  /// Check if an update is available
   bool get hasUpdate {
     return latestVersion != null &&
         currentVersion != null &&
         latestVersion!.isDifferentFrom(currentVersion);
   }
 
-  /// Check if Eden is not installed
   bool get isNotInstalled {
     return currentVersion?.isInstalled != true;
   }
 
-  /// Check if any operation is in progress
   bool get isOperationInProgress => status.isInProgress;
-
-  /// Check if currently checking for updates
   bool get isChecking => status == UpdateStatus.checking;
-
-  /// Check if currently downloading
   bool get isDownloading => status == UpdateStatus.downloading;
-
-  /// Check if can start a new operation
   bool get canStartOperation => status.canStartOperation;
 
-  /// Get installation status
   InstallationStatus get installationStatus {
     if (isNotInstalled) return InstallationStatus.notInstalled;
     if (hasUpdate) return InstallationStatus.updateAvailable;
     return InstallationStatus.installed;
   }
 
-  /// Create a copy of the state with updated values
   UpdaterState copyWith({
     UpdateInfo? currentVersion,
     UpdateInfo? latestVersion,

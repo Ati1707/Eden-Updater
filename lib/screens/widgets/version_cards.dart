@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:android_intent_plus/android_intent.dart';
 import '../../models/update_info.dart';
+import '../../core/utils/url_launcher_utils.dart';
+import '../../core/services/logging_service.dart';
 
 /// Widget displaying current and latest version information
 class VersionCards extends StatelessWidget {
@@ -142,92 +140,42 @@ class _VersionCard extends StatelessWidget {
   }
 
   Future<void> _launchUrl(BuildContext context, String url) async {
+    LoggingService.info('Attempting to launch URL: $url');
     // Capture context properties before async operations
     final messenger = ScaffoldMessenger.of(context);
-    final mounted = context.mounted;
-
-    if (!mounted) return;
+    final theme = Theme.of(context);
 
     try {
-      final uri = Uri.parse(url);
+      final success = await UrlLauncherUtils.launchUrlRobust(url);
 
-      // Try different launch modes for better Android compatibility
-      bool launched = false;
-
-      // Method 1: Try external application mode
-      try {
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-          launched = true;
-        }
-      } catch (e) {
-        // Continue to next method
-      }
-
-      // Method 2: Try platform default mode
-      if (!launched) {
-        try {
-          await launchUrl(uri, mode: LaunchMode.platformDefault);
-          launched = true;
-        } catch (e) {
-          // Continue to next method
-        }
-      }
-
-      // Method 3: Try in-app web view mode (will fallback to external browser)
-      if (!launched) {
-        try {
-          await launchUrl(uri, mode: LaunchMode.inAppWebView);
-          launched = true;
-        } catch (e) {
-          // Continue to next method
-        }
-      }
-
-      // Method 4: Android Intent fallback
-      if (!launched && Platform.isAndroid) {
-        try {
-          final intent = AndroidIntent(
-            action: 'android.intent.action.VIEW',
-            data: url,
-            flags: <int>[0x10000000], // FLAG_ACTIVITY_NEW_TASK
-          );
-          await intent.launch();
-          launched = true;
-        } catch (e) {
-          // Final fallback failed
-        }
-      }
-
-      if (!launched) {
-        // Show error message to user
-        _showUrlErrorSafe(messenger, url);
+      if (!success) {
+        // Fallback: copy URL to clipboard
+        await UrlLauncherUtils.copyUrlToClipboard(url);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not open link. URL copied to clipboard.',
+              style: TextStyle(color: theme.colorScheme.onInverseSurface),
+            ),
+            backgroundColor: theme.colorScheme.inverseSurface,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     } catch (e) {
-      _showUrlErrorSafe(messenger, url);
-    }
-  }
+      LoggingService.error('Failed to launch URL: $url', e);
 
-  void _showUrlErrorSafe(ScaffoldMessengerState messenger, String url) {
-    // Show error message to user using captured messenger
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Could not open link. Please visit: $url'),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Copy',
-          onPressed: () {
-            // Copy URL to clipboard as fallback
-            Clipboard.setData(ClipboardData(text: url));
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text('URL copied to clipboard'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
+      // Show error message
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not open link or copy to clipboard.',
+            style: TextStyle(color: theme.colorScheme.onError),
+          ),
+          backgroundColor: theme.colorScheme.error,
+          duration: const Duration(seconds: 4),
         ),
-      ),
-    );
+      );
+    }
   }
 }

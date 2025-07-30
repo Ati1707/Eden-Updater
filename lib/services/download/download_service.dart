@@ -4,14 +4,14 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import '../../core/errors/app_exceptions.dart';
 import '../../core/services/logging_service.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/update_info.dart';
 
-/// Service for downloading files
 class DownloadService {
-  static const int maxRetries = 3;
-  static const Duration retryDelay = Duration(seconds: 2);
+  // Use platform-aware configuration values
+  static int get maxRetries => AppConstants.maxRetries;
+  static Duration get retryDelay => AppConstants.retryDelay;
 
-  /// Download a file with progress tracking and retry logic
   Future<String> downloadFile(
     UpdateInfo updateInfo,
     String downloadPath, {
@@ -37,7 +37,6 @@ class DownloadService {
     );
   }
 
-  /// Download with retry logic
   Future<String> _downloadWithRetry(
     UpdateInfo updateInfo,
     String downloadPath,

@@ -1,6 +1,4 @@
-/// Utility functions for date formatting
 class DateUtils {
-  /// Format a DateTime as a relative time string (e.g., "2 days ago")
   static String formatRelativeTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
