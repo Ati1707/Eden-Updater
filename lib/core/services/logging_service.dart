@@ -126,22 +126,28 @@ class LoggingService {
       final directory = await getApplicationDocumentsDirectory();
       final logDir = Directory(path.join(directory.path, 'Eden', 'logs'));
 
-      // Debug logging for Android troubleshooting
-      print('[LoggingService] Documents directory: ${directory.path}');
-      print('[LoggingService] Log directory: ${logDir.path}');
-      print('[LoggingService] Log directory exists: ${await logDir.exists()}');
+      // Debug logging for Android troubleshooting - write directly to log file
+      _logSink?.writeln(
+        '[${DateTime.now().toIso8601String()}] [DEBUG] Documents directory: ${directory.path}',
+      );
+      _logSink?.writeln(
+        '[${DateTime.now().toIso8601String()}] [DEBUG] Log directory: ${logDir.path}',
+      );
+      _logSink?.writeln(
+        '[${DateTime.now().toIso8601String()}] [DEBUG] Log directory exists: ${await logDir.exists()}',
+      );
 
       if (!await logDir.exists()) {
-        print(
-          '[LoggingService] Log directory does not exist, returning empty list',
+        _logSink?.writeln(
+          '[${DateTime.now().toIso8601String()}] [DEBUG] Log directory does not exist, returning empty list',
         );
         return [];
       }
 
       // List all files in the directory for debugging
       final allEntities = await logDir.list().toList();
-      print(
-        '[LoggingService] All entities in log directory: ${allEntities.map((e) => path.basename(e.path)).toList()}',
+      _logSink?.writeln(
+        '[${DateTime.now().toIso8601String()}] [DEBUG] All entities in log directory: ${allEntities.map((e) => path.basename(e.path)).toList()}',
       );
 
       // Correctly filter the stream before collecting to a list.
@@ -151,8 +157,8 @@ class LoggingService {
           .cast<File>()
           .toList();
 
-      print(
-        '[LoggingService] Found ${files.length} log files: ${files.map((f) => path.basename(f.path)).toList()}',
+      _logSink?.writeln(
+        '[${DateTime.now().toIso8601String()}] [DEBUG] Found ${files.length} log files: ${files.map((f) => path.basename(f.path)).toList()}',
       );
 
       // Sort newest first for the UI.
@@ -161,7 +167,9 @@ class LoggingService {
       );
       return files;
     } catch (e) {
-      print('[LoggingService] Error getting log files: $e');
+      _logSink?.writeln(
+        '[${DateTime.now().toIso8601String()}] [ERROR] Error getting log files: $e',
+      );
       return [];
     }
   }

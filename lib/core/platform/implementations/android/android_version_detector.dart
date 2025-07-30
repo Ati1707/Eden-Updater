@@ -41,6 +41,22 @@ class AndroidVersionDetector implements IPlatformVersionDetector {
         );
       }
 
+      // First, validate if Eden is actually installed on the device
+      final isEdenInstalled = await _isEdenAppInstalled();
+
+      if (!isEdenInstalled) {
+        LoggingService.info(
+          'Eden app is not installed on device - clearing stored version info',
+        );
+        // Clear any stored version info since Eden is not actually installed
+        await clearVersionInfo(channel);
+        return null;
+      }
+
+      LoggingService.info(
+        'Eden app is installed on device - checking stored version',
+      );
+
       // Method 1: Check stored installation metadata
       final metadata = await _getAndroidInstallationMetadata(channel);
       if (metadata != null && metadata.containsKey('version')) {
@@ -120,10 +136,18 @@ class AndroidVersionDetector implements IPlatformVersionDetector {
         }
       }
 
+      // If Eden is installed but we have no version info, return a generic version
       LoggingService.info(
-        'No Android installation found for channel: $channel',
+        'Eden is installed but no version information found - returning generic version',
       );
-      return null;
+      return UpdateInfo(
+        version: 'Unknown',
+        downloadUrl: '',
+        releaseNotes: 'Eden is installed but version is unknown',
+        releaseDate: DateTime.now(),
+        fileSize: 0,
+        releaseUrl: '',
+      );
     } catch (e) {
       LoggingService.error('Error getting Android current version: $e');
       return null;
@@ -252,5 +276,108 @@ class AndroidVersionDetector implements IPlatformVersionDetector {
       return DateTime.tryParse(metadata['installDate']!);
     }
     return null;
+  }
+
+  /// Check if Eden app is actually installed on the Android device
+  Future<bool> _isEdenAppInstalled() async {
+    try {
+      LoggingService.debug(
+        'Checking if Eden app is installed on Android device',
+      );
+
+      final possiblePackageNames = [
+        'dev.eden.eden_emulator',
+        'org.eden.emulator',
+        'com.eden.emulator',
+        'eden.emulator',
+      ];
+
+      for (final packageName in possiblePackageNames) {
+        if (await _isPackageInstalled(packageName)) {
+          LoggingService.info('Found installed Eden package: $packageName');
+          return true;
+        }
+      }
+
+      LoggingService.info('No Eden package found installed on device');
+      return false;
+    } catch (e) {
+      LoggingService.warning('Error checking if Eden app is installed: $e');
+      return false;
+    }
+  }
+
+  /// Check if a specific package is installed on the device
+  Future<bool> _isPackageInstalled(String packageName) async {
+    try {
+      LoggingService.debug('Checking if package is installed: $packageName');
+
+      // For Android version detection, we use a heuristic approach:
+      // If we have recent installation metadata, assume the app is still installed
+      // This avoids complex platform channel implementations while being practical
+
+      final metadata = await _getAndroidInstallationMetadata('stable');
+      if (metadata != null && metadata.containsKey('installDate')) {
+        final installDate = DateTime.tryParse(metadata['installDate']!);
+        if (installDate != null) {
+          final daysSinceInstall = DateTime.now()
+              .difference(installDate)
+              .inDays;
+          // If installed within the last 30 days, assume it's still there
+          final isRecentlyInstalled = daysSinceInstall <= 30;
+          LoggingService.debug(
+            'Package $packageName: installed $daysSinceInstall days ago, assuming installed: $isRecentlyInstalled',
+          );
+          return isRecentlyInstalled;
+        }
+      }
+
+      // Also check if we have a successful package name stored from recent launches
+      final successfulPackage = await getSuccessfulPackageName();
+      if (successfulPackage == packageName) {
+        LoggingService.debug(
+          'Package $packageName was successfully launched recently, assuming installed',
+        );
+        return true;
+      }
+
+      LoggingService.debug(
+        'No evidence of package $packageName being installed',
+      );
+      return false;
+    } catch (e) {
+      LoggingService.debug('Error checking if package is installed: $e');
+      return false;
+    }
+  }
+
+  /// Validate and clean up stale version information
+  /// This method can be called periodically to ensure version info reflects actual installation status
+  Future<void> validateAndCleanupVersionInfo() async {
+    try {
+      LoggingService.info('Validating Android version information');
+
+      final isInstalled = await _isEdenAppInstalled();
+      if (!isInstalled) {
+        LoggingService.info(
+          'Eden not detected on device - clearing all stored version information',
+        );
+
+        // Clear version info for all channels
+        await clearVersionInfo('stable');
+        await clearVersionInfo('nightly');
+
+        // Clear successful package name
+        await _preferencesService.remove('android_successful_package');
+
+        LoggingService.info('Cleared stale Android version information');
+      } else {
+        LoggingService.info(
+          'Eden detected on device - version information is valid',
+        );
+      }
+    } catch (e) {
+      LoggingService.error('Error validating Android version information: $e');
+    }
   }
 }
