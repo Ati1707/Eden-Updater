@@ -31,11 +31,14 @@ SOURCE_DIR="build/macos/Build/Products/Release"
 TARGET_DIR="$OUTER_PACKAGE_DIR/$INNER_PACKAGE_DIR"
 
 # Copy the .app bundle
-cp -R "$SOURCE_DIR/Eden Updater.app" "$TARGET_DIR/"
+cp -R "$SOURCE_DIR/eden_updater.app" "$TARGET_DIR/"
 
 # Rename the app bundle to a simpler name for distribution
-if [ -d "$TARGET_DIR/Eden Updater.app" ]; then
-    mv "$TARGET_DIR/Eden Updater.app" "$TARGET_DIR/EdenUpdater.app"
+if [ -d "$TARGET_DIR/eden_updater.app" ]; then
+    mv "$TARGET_DIR/eden_updater.app" "$TARGET_DIR/EdenUpdater.app"
+else
+    echo "Error: Failed to copy the application bundle. Aborting."
+    exit 1
 fi
 
 # Create a simple README
