@@ -30,6 +30,12 @@ import 'implementations/android/android_file_handler.dart';
 import 'implementations/android/android_version_detector.dart';
 import 'implementations/android/android_update_service.dart';
 import 'implementations/android/android_installation_service.dart';
+import 'implementations/macos/macos_installer.dart';
+import 'implementations/macos/macos_launcher.dart';
+import 'implementations/macos/macos_file_handler.dart';
+import 'implementations/macos/macos_version_detector.dart';
+import 'implementations/macos/macos_update_service.dart';
+import 'implementations/macos/macos_installation_service.dart';
 
 // Services for dependency injection
 import '../../services/extraction/extraction_service.dart';
@@ -128,6 +134,13 @@ class PlatformFactory {
       LoggingService.info('[PlatformFactory] Instantiating AndroidInstaller');
       return AndroidInstaller();
     }
+    if (Platform.isMacOS) {
+      LoggingService.info('[PlatformFactory] Instantiating MacOSInstaller');
+      return MacOSInstaller(
+        ExtractionService(fileHandler),
+        PreferencesService(),
+      );
+    }
 
     LoggingService.error(
       '[PlatformFactory] No installer implementation available for platform: $platformName',
@@ -160,6 +173,10 @@ class PlatformFactory {
     if (Platform.isAndroid) {
       LoggingService.info('[PlatformFactory] Instantiating AndroidLauncher');
       return AndroidLauncher(PreferencesService());
+    }
+    if (Platform.isMacOS) {
+      LoggingService.info('[PlatformFactory] Instantiating MacOSLauncher');
+      return MacOSLauncher(PreferencesService());
     }
 
     LoggingService.error(
@@ -195,6 +212,12 @@ class PlatformFactory {
       );
       return AndroidLauncher(preferencesService);
     }
+    if (Platform.isMacOS) {
+      LoggingService.info(
+        '[PlatformFactory] Instantiating MacOSLauncher with provided services',
+      );
+      return MacOSLauncher(preferencesService);
+    }
 
     LoggingService.error(
       '[PlatformFactory] No launcher implementation available for platform: $platformName',
@@ -219,6 +242,10 @@ class PlatformFactory {
     if (Platform.isAndroid) {
       LoggingService.info('[PlatformFactory] Instantiating AndroidFileHandler');
       return AndroidFileHandler();
+    }
+    if (Platform.isMacOS) {
+      LoggingService.info('[PlatformFactory] Instantiating MacOSFileHandler');
+      return MacOSFileHandler();
     }
 
     LoggingService.error(
@@ -259,6 +286,12 @@ class PlatformFactory {
       );
       return AndroidVersionDetector(PreferencesService());
     }
+    if (Platform.isMacOS) {
+      LoggingService.info(
+        '[PlatformFactory] Instantiating MacOSVersionDetector',
+      );
+      return MacOSVersionDetector(PreferencesService());
+    }
 
     LoggingService.error(
       '[PlatformFactory] No version detector implementation available for platform: $platformName',
@@ -287,6 +320,10 @@ class PlatformFactory {
         '[PlatformFactory] Instantiating AndroidUpdateService',
       );
       return AndroidUpdateService(PreferencesService());
+    }
+    if (Platform.isMacOS) {
+      LoggingService.info('[PlatformFactory] Instantiating MacOSUpdateService');
+      return MacOSUpdateService(PreferencesService());
     }
 
     LoggingService.error(
@@ -321,6 +358,12 @@ class PlatformFactory {
       );
       return AndroidUpdateService(preferencesService);
     }
+    if (Platform.isMacOS) {
+      LoggingService.info(
+        '[PlatformFactory] Instantiating MacOSUpdateService with provided services',
+      );
+      return MacOSUpdateService(preferencesService);
+    }
 
     LoggingService.error(
       '[PlatformFactory] No update service implementation available for platform: $platformName',
@@ -353,6 +396,12 @@ class PlatformFactory {
         '[PlatformFactory] Instantiating AndroidInstallationService',
       );
       return AndroidInstallationService(fileHandler, PreferencesService());
+    }
+    if (Platform.isMacOS) {
+      LoggingService.info(
+        '[PlatformFactory] Instantiating MacOSInstallationService',
+      );
+      return MacOSInstallationService(fileHandler, PreferencesService());
     }
 
     LoggingService.error(
@@ -388,6 +437,12 @@ class PlatformFactory {
       );
       return AndroidInstallationService(fileHandler, preferencesService);
     }
+    if (Platform.isMacOS) {
+      LoggingService.info(
+        '[PlatformFactory] Instantiating MacOSInstallationService with provided services',
+      );
+      return MacOSInstallationService(fileHandler, preferencesService);
+    }
 
     LoggingService.error(
       '[PlatformFactory] No installation service implementation available for platform: $platformName',
@@ -410,11 +465,14 @@ class PlatformFactory {
   }
 
   static bool isCurrentPlatformSupported() {
-    return Platform.isWindows || Platform.isLinux || Platform.isAndroid;
+    return Platform.isWindows ||
+        Platform.isLinux ||
+        Platform.isAndroid ||
+        Platform.isMacOS;
   }
 
   static List<String> getSupportedPlatforms() {
-    return ['Windows', 'Linux', 'Android'];
+    return ['Windows', 'Linux', 'Android', 'macOS'];
   }
 
   static List<String> getDetectablePlatforms() {
