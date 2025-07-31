@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:eden_updater/core/platform/platform_factory.dart';
 import 'package:eden_updater/core/platform/models/platform_config.dart';
-import 'package:eden_updater/core/platform/exceptions/platform_exceptions.dart';
 
 void main() {
   group('PlatformFactory', () {
@@ -28,6 +27,7 @@ void main() {
       expect(platforms, contains('Windows'));
       expect(platforms, contains('Linux'));
       expect(platforms, contains('Android'));
+      expect(platforms, contains('macOS'));
     });
 
     test('getDetectablePlatforms includes macOS', () {
@@ -83,30 +83,18 @@ void main() {
       expect(info['operatingSystem'], isA<String>());
     });
 
-    test(
-      'factory methods throw appropriate exceptions for unimplemented platforms',
-      () {
-        expect(
-          () => PlatformFactory.createInstaller(),
-          throwsA(isA<PlatformOperationException>()),
-        );
-
-        expect(
-          () => PlatformFactory.createLauncher(),
-          throwsA(isA<PlatformOperationException>()),
-        );
-
-        expect(
-          () => PlatformFactory.createFileHandler(),
-          throwsA(isA<PlatformOperationException>()),
-        );
-
-        expect(
-          () => PlatformFactory.createVersionDetector(),
-          throwsA(isA<PlatformOperationException>()),
-        );
-      },
-    );
+    test('factory methods create appropriate implementations', () {
+      // All platforms should now have implementations
+      expect(() => PlatformFactory.createInstaller(), returnsNormally);
+      expect(() => PlatformFactory.createLauncher(), returnsNormally);
+      expect(() => PlatformFactory.createFileHandler(), returnsNormally);
+      expect(() => PlatformFactory.createVersionDetector(), returnsNormally);
+      expect(() => PlatformFactory.createUpdateService(), returnsNormally);
+      expect(
+        () => PlatformFactory.createInstallationService(),
+        returnsNormally,
+      );
+    });
 
     test('resetCache clears cached values', () {
       // Get config to populate cache
@@ -118,6 +106,79 @@ void main() {
       // Should still work after reset
       final config = PlatformFactory.getCurrentPlatformConfig();
       expect(config, isA<PlatformConfig>());
+    });
+
+    group('macOS Platform Integration', () {
+      test('macOS platform configuration is properly defined', () {
+        final macosConfig = PlatformConfig.macos;
+        expect(macosConfig.name, equals('macOS'));
+        expect(macosConfig.supportedFileExtensions, contains('.dmg'));
+        expect(macosConfig.supportedFileExtensions, contains('.app'));
+        expect(macosConfig.supportedFileExtensions, contains('.zip'));
+        expect(macosConfig.supportedChannels, contains('stable'));
+        expect(macosConfig.supportedChannels, contains('nightly'));
+        expect(macosConfig.supportsShortcuts, isTrue);
+        expect(macosConfig.supportsPortableMode, isTrue);
+        expect(macosConfig.requiresExecutablePermissions, isTrue);
+        expect(macosConfig.defaultInstallationDir, equals('Eden'));
+      });
+
+      test('macOS file extensions are supported', () {
+        // Test with macOS config
+        final macosConfig = PlatformConfig.macos;
+        for (final extension in macosConfig.supportedFileExtensions) {
+          expect(
+            macosConfig.supportedFileExtensions.contains(extension),
+            isTrue,
+          );
+        }
+      });
+
+      test('macOS channels are supported', () {
+        final macosConfig = PlatformConfig.macos;
+        expect(macosConfig.supportedChannels.contains('stable'), isTrue);
+        expect(macosConfig.supportedChannels.contains('nightly'), isTrue);
+      });
+
+      test('macOS feature flags are properly configured', () {
+        final macosConfig = PlatformConfig.macos;
+        expect(macosConfig.getFeatureFlag('supportsShortcutCreation'), isTrue);
+        expect(
+          macosConfig.getFeatureFlag('supportsPortableInstallation'),
+          isTrue,
+        );
+        expect(
+          macosConfig.getFeatureFlag('requiresExecutablePermissions'),
+          isTrue,
+        );
+        expect(macosConfig.getFeatureFlag('supportsAutoLaunch'), isTrue);
+      });
+
+      test('macOS platform-specific config values are accessible', () {
+        final macosConfig = PlatformConfig.macos;
+        expect(
+          macosConfig.getConfigValue<String>('shortcutExtension'),
+          equals('.app'),
+        );
+        expect(
+          macosConfig.getConfigValue<List<String>>('executableExtensions'),
+          contains('.app'),
+        );
+        expect(
+          macosConfig.getConfigValue<List<String>>('archiveExtensions'),
+          contains('.dmg'),
+        );
+        expect(
+          macosConfig.getConfigValue<List<String>>('archiveExtensions'),
+          contains('.zip'),
+        );
+        expect(macosConfig.getConfigValue<int>('maxRetries'), equals(10));
+        expect(macosConfig.getConfigValue<int>('retryDelaySeconds'), equals(3));
+        expect(
+          macosConfig.getConfigValue<int>('requestTimeoutSeconds'),
+          equals(10),
+        );
+      });
     });
   });
 }

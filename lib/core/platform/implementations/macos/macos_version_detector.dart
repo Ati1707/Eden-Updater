@@ -55,9 +55,28 @@ class MacOSVersionDetector implements IPlatformVersionDetector {
 
     try {
       await _preferencesService.setCurrentVersion(channel, updateInfo.version);
-      LoggingService.debug('[macOS] Version info stored successfully');
+      await _preferencesService.setInstallationDate(channel, DateTime.now());
+      LoggingService.debug(
+        '[macOS] Version info and installation date stored successfully',
+      );
     } catch (e) {
       LoggingService.error('[macOS] Error storing version info', e);
+      rethrow;
+    }
+  }
+
+  /// Set current version for a channel (implementation of missing interface method)
+  Future<void> setCurrentVersion(String channel, String version) async {
+    LoggingService.info(
+      '[macOS] Setting current version for $channel: $version',
+    );
+
+    try {
+      await _preferencesService.setCurrentVersion(channel, version);
+      await _preferencesService.setInstallationDate(channel, DateTime.now());
+      LoggingService.debug('[macOS] Current version set successfully');
+    } catch (e) {
+      LoggingService.error('[macOS] Error setting current version', e);
       rethrow;
     }
   }
@@ -138,46 +157,89 @@ class MacOSVersionDetector implements IPlatformVersionDetector {
     }
   }
 
-  /// Get version from Info.plist in .app bundle
+  /// Get version from Info.plist in .app bundle using plutil
   Future<String?> _getVersionFromInfoPlist(String edenPath) async {
     try {
       final appBundlePath = edenPath.substring(0, edenPath.indexOf('.app') + 4);
       final infoPlistPath = path.join(appBundlePath, 'Contents', 'Info.plist');
 
       if (!await File(infoPlistPath).exists()) {
+        LoggingService.debug('[macOS] Info.plist not found at: $infoPlistPath');
         return null;
       }
 
-      // Use plutil to read version from Info.plist
+      LoggingService.debug('[macOS] Reading Info.plist at: $infoPlistPath');
+
+      // Try CFBundleShortVersionString first (preferred for user-facing version)
       final result = await Process.run('plutil', [
         '-extract',
         'CFBundleShortVersionString',
         'raw',
         infoPlistPath,
-      ]);
+      ]).timeout(const Duration(seconds: 10));
 
       if (result.exitCode == 0) {
         final version = result.stdout.toString().trim();
-        if (version.isNotEmpty && version != 'null') {
+        if (version.isNotEmpty &&
+            version != 'null' &&
+            _isValidVersion(version)) {
+          LoggingService.debug(
+            '[macOS] Found CFBundleShortVersionString: $version',
+          );
           return version;
         }
       }
 
-      // Try alternative version key
+      // Try CFBundleVersion as fallback
       final result2 = await Process.run('plutil', [
         '-extract',
         'CFBundleVersion',
         'raw',
         infoPlistPath,
-      ]);
+      ]).timeout(const Duration(seconds: 10));
 
       if (result2.exitCode == 0) {
         final version = result2.stdout.toString().trim();
-        if (version.isNotEmpty && version != 'null') {
+        if (version.isNotEmpty &&
+            version != 'null' &&
+            _isValidVersion(version)) {
+          LoggingService.debug('[macOS] Found CFBundleVersion: $version');
           return version;
         }
       }
 
+      // Try alternative keys that might contain version information
+      final alternativeKeys = [
+        'CFBundleGetInfoString',
+        'NSHumanReadableCopyright',
+      ];
+
+      for (final key in alternativeKeys) {
+        try {
+          final result = await Process.run('plutil', [
+            '-extract',
+            key,
+            'raw',
+            infoPlistPath,
+          ]).timeout(const Duration(seconds: 5));
+
+          if (result.exitCode == 0) {
+            final content = result.stdout.toString().trim();
+            final versionMatch = RegExp(
+              r'v?(\d+\.\d+\.\d+)',
+            ).firstMatch(content);
+            if (versionMatch != null) {
+              final version = versionMatch.group(1)!;
+              LoggingService.debug('[macOS] Found version in $key: $version');
+              return version;
+            }
+          }
+        } catch (e) {
+          // Continue to next key
+        }
+      }
+
+      LoggingService.debug('[macOS] No valid version found in Info.plist');
       return null;
     } catch (e) {
       LoggingService.debug('[macOS] Error reading Info.plist: $e');
@@ -189,23 +251,55 @@ class MacOSVersionDetector implements IPlatformVersionDetector {
   Future<String?> _getVersionFromExecutable(String edenPath) async {
     try {
       if (!await File(edenPath).exists()) {
+        LoggingService.debug('[macOS] Executable not found at: $edenPath');
         return null;
       }
 
-      // Try running with --version flag
-      final result = await Process.run(edenPath, [
-        '--version',
-      ]).timeout(const Duration(seconds: 10));
+      // Check if file is executable
+      final statResult = await Process.run('stat', ['-f', '%A', edenPath]);
+      if (statResult.exitCode != 0) {
+        LoggingService.debug('[macOS] Cannot check permissions for: $edenPath');
+        return null;
+      }
 
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString().trim();
-        // Extract version number from output (usually in format "Eden v1.2.3" or "1.2.3")
-        final versionMatch = RegExp(r'v?(\d+\.\d+\.\d+)').firstMatch(output);
-        if (versionMatch != null) {
-          return versionMatch.group(1);
+      final permissions = statResult.stdout.toString().trim();
+      if (!permissions.contains('755') && !permissions.contains('777')) {
+        LoggingService.debug(
+          '[macOS] File is not executable: $edenPath (permissions: $permissions)',
+        );
+        return null;
+      }
+
+      LoggingService.debug(
+        '[macOS] Querying version from executable: $edenPath',
+      );
+
+      // Try different version flags
+      final versionFlags = ['--version', '-v', '--help'];
+
+      for (final flag in versionFlags) {
+        try {
+          final result = await Process.run(edenPath, [
+            flag,
+          ]).timeout(const Duration(seconds: 10));
+
+          if (result.exitCode == 0) {
+            final output = result.stdout.toString().trim();
+            final version = _extractVersionFromOutput(output);
+            if (version != null) {
+              LoggingService.debug(
+                '[macOS] Found version with $flag: $version',
+              );
+              return version;
+            }
+          }
+        } catch (e) {
+          // Try next flag
+          LoggingService.debug('[macOS] Failed to get version with $flag: $e');
         }
       }
 
+      LoggingService.debug('[macOS] No version found from executable');
       return null;
     } catch (e) {
       LoggingService.debug('[macOS] Error getting version from executable: $e');
@@ -222,19 +316,51 @@ class MacOSVersionDetector implements IPlatformVersionDetector {
         'VERSION',
         '.version',
         'eden_version',
+        'version',
+        'release_info.txt',
+        'build_info.txt',
       ];
+
+      LoggingService.debug(
+        '[macOS] Searching for version files in: $installDir',
+      );
 
       for (final fileName in versionFiles) {
         final versionFile = File(path.join(installDir, fileName));
         if (await versionFile.exists()) {
-          final content = await versionFile.readAsString();
-          final version = content.trim();
-          if (version.isNotEmpty) {
-            return version;
+          try {
+            final content = await versionFile.readAsString();
+            final lines = content.split('\n');
+
+            // Try each line to find a version
+            for (final line in lines) {
+              final trimmedLine = line.trim();
+              if (trimmedLine.isNotEmpty) {
+                // Try to extract version from the line
+                final version = _extractVersionFromOutput(trimmedLine);
+                if (version != null) {
+                  LoggingService.debug(
+                    '[macOS] Found version in $fileName: $version',
+                  );
+                  return version;
+                }
+
+                // If the line itself looks like a version, use it
+                if (_isValidVersion(trimmedLine)) {
+                  LoggingService.debug(
+                    '[macOS] Found version in $fileName: $trimmedLine',
+                  );
+                  return trimmedLine;
+                }
+              }
+            }
+          } catch (e) {
+            LoggingService.debug('[macOS] Error reading $fileName: $e');
           }
         }
       }
 
+      LoggingService.debug('[macOS] No version files found');
       return null;
     } catch (e) {
       LoggingService.debug('[macOS] Error reading version file: $e');
@@ -252,5 +378,179 @@ class MacOSVersionDetector implements IPlatformVersionDetector {
     final baseDir = path.join(homeDir, 'Documents', 'Eden');
     final channelDir = channel == 'nightly' ? 'Eden-Nightly' : 'Eden-Release';
     return path.join(baseDir, channelDir);
+  }
+
+  /// Extract version number from text output
+  String? _extractVersionFromOutput(String output) {
+    // Try different version patterns
+    final patterns = [
+      RegExp(r'v?(\d+\.\d+\.\d+(?:\.\d+)?)', caseSensitive: false),
+      RegExp(
+        r'version\s*:?\s*v?(\d+\.\d+\.\d+(?:\.\d+)?)',
+        caseSensitive: false,
+      ),
+      RegExp(r'eden\s+v?(\d+\.\d+\.\d+(?:\.\d+)?)', caseSensitive: false),
+      RegExp(r'build\s+v?(\d+\.\d+\.\d+(?:\.\d+)?)', caseSensitive: false),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(output);
+      if (match != null) {
+        final version = match.group(1)!;
+        if (_isValidVersion(version)) {
+          return version;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /// Validate if a string is a valid version number
+  bool _isValidVersion(String version) {
+    // Check if it matches semantic versioning pattern
+    final semverPattern = RegExp(r'^\d+\.\d+\.\d+(?:\.\d+)?$');
+    if (!semverPattern.hasMatch(version)) {
+      return false;
+    }
+
+    // Additional validation: ensure it's not just zeros
+    if (version == '0.0.0' || version == '0.0.0.0') {
+      return false;
+    }
+
+    return true;
+  }
+
+  /// Get installation date for a channel
+  Future<DateTime?> getInstallationDate(String channel) async {
+    LoggingService.debug(
+      '[macOS] Getting installation date for channel: $channel',
+    );
+
+    try {
+      final date = await _preferencesService.getInstallationDate(channel);
+      if (date != null) {
+        LoggingService.debug('[macOS] Found installation date: $date');
+      } else {
+        LoggingService.debug('[macOS] No installation date found');
+      }
+      return date;
+    } catch (e) {
+      LoggingService.error('[macOS] Error getting installation date', e);
+      return null;
+    }
+  }
+
+  /// Set installation date for a channel
+  Future<void> setInstallationDate(String channel, DateTime date) async {
+    LoggingService.info(
+      '[macOS] Setting installation date for $channel: $date',
+    );
+
+    try {
+      await _preferencesService.setInstallationDate(channel, date);
+      LoggingService.debug('[macOS] Installation date set successfully');
+    } catch (e) {
+      LoggingService.error('[macOS] Error setting installation date', e);
+      rethrow;
+    }
+  }
+
+  /// Compare two version strings
+  int compareVersions(String version1, String version2) {
+    if (!_isValidVersion(version1) || !_isValidVersion(version2)) {
+      LoggingService.debug(
+        '[macOS] Invalid version format for comparison: $version1 vs $version2',
+      );
+      return version1.compareTo(version2); // Fallback to string comparison
+    }
+
+    final parts1 = version1.split('.').map(int.parse).toList();
+    final parts2 = version2.split('.').map(int.parse).toList();
+
+    // Pad shorter version with zeros
+    while (parts1.length < parts2.length) {
+      parts1.add(0);
+    }
+    while (parts2.length < parts1.length) {
+      parts2.add(0);
+    }
+
+    for (int i = 0; i < parts1.length; i++) {
+      if (parts1[i] < parts2[i]) {
+        return -1;
+      } else if (parts1[i] > parts2[i]) {
+        return 1;
+      }
+    }
+
+    return 0; // Versions are equal
+  }
+
+  /// Check if version1 is newer than version2
+  bool isVersionNewer(String version1, String version2) {
+    return compareVersions(version1, version2) > 0;
+  }
+
+  /// Check if version1 is older than version2
+  bool isVersionOlder(String version1, String version2) {
+    return compareVersions(version1, version2) < 0;
+  }
+
+  /// Check if two versions are equal
+  bool areVersionsEqual(String version1, String version2) {
+    return compareVersions(version1, version2) == 0;
+  }
+
+  /// Validate version format and content
+  bool validateVersion(String version) {
+    if (!_isValidVersion(version)) {
+      return false;
+    }
+
+    try {
+      final parts = version.split('.').map(int.parse).toList();
+
+      // Check for reasonable version numbers (not too large)
+      for (final part in parts) {
+        if (part < 0 || part > 9999) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get version information summary for a channel
+  Future<Map<String, dynamic>> getVersionSummary(String channel) async {
+    try {
+      final currentVersion = await getCurrentVersion(channel);
+      final installationDate = await getInstallationDate(channel);
+      final installDir = await _getInstallationDirectory(channel);
+      final dirExists = await Directory(installDir).exists();
+
+      return {
+        'channel': channel,
+        'version': currentVersion?.version ?? 'Not installed',
+        'isInstalled': currentVersion != null,
+        'installationDate': installationDate?.toIso8601String(),
+        'installationDirectory': installDir,
+        'directoryExists': dirExists,
+        'hasValidVersion':
+            currentVersion != null && validateVersion(currentVersion.version),
+      };
+    } catch (e) {
+      LoggingService.error('[macOS] Error getting version summary', e);
+      return {
+        'channel': channel,
+        'version': 'Error',
+        'isInstalled': false,
+        'error': e.toString(),
+      };
+    }
   }
 }

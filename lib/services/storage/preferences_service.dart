@@ -64,13 +64,31 @@ class PreferencesService {
     await prefs.setBool(AppConstants.createShortcutsKey, createShortcuts);
   }
 
+  Future<DateTime?> getInstallationDate(String channel) async {
+    final prefs = await _preferences;
+    final channelDateKey = '${AppConstants.installationDateKey}_$channel';
+    final dateString = prefs.getString(channelDateKey);
+    if (dateString != null) {
+      return DateTime.tryParse(dateString);
+    }
+    return null;
+  }
+
+  Future<void> setInstallationDate(String channel, DateTime date) async {
+    final prefs = await _preferences;
+    final channelDateKey = '${AppConstants.installationDateKey}_$channel';
+    await prefs.setString(channelDateKey, date.toIso8601String());
+  }
+
   Future<void> clearVersionInfo(String channel) async {
     final prefs = await _preferences;
     final channelVersionKey = '${AppConstants.currentVersionKey}_$channel';
     final channelExecKey = '${AppConstants.edenExecutableKey}_$channel';
+    final channelDateKey = '${AppConstants.installationDateKey}_$channel';
 
     await prefs.remove(channelVersionKey);
     await prefs.remove(channelExecKey);
+    await prefs.remove(channelDateKey);
   }
 
   /// Generic method to set a string value (for Android metadata and other uses)

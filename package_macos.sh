@@ -2,17 +2,11 @@
 
 echo "Packaging Eden Updater for macOS..."
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
 # Build the release version
-echo -e "${YELLOW}Building release version...${NC}"
+echo "Building release version..."
 flutter build macos --release
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Build failed!${NC}"
+    echo "Build failed!"
     exit 1
 fi
 
@@ -28,153 +22,207 @@ if [ -d "$INNER_PACKAGE_DIR" ]; then
     rm -rf "$INNER_PACKAGE_DIR"
 fi
 
-echo -e "${YELLOW}Creating package structure...${NC}"
+# Create the nested directory structure
 mkdir -p "$OUTER_PACKAGE_DIR/$INNER_PACKAGE_DIR"
 
-# Copy the built app bundle
-echo -e "${YELLOW}Copying application bundle...${NC}"
-cp -R "build/macos/Build/Products/Release/eden_updater.app" "$OUTER_PACKAGE_DIR/$INNER_PACKAGE_DIR/"
+# Copy all necessary files
+echo "Copying files..."
+SOURCE_DIR="build/macos/Build/Products/Release"
+TARGET_DIR="$OUTER_PACKAGE_DIR/$INNER_PACKAGE_DIR"
 
-# Copy additional files
-echo -e "${YELLOW}Copying additional files...${NC}"
-cp README.md "$OUTER_PACKAGE_DIR/"
-cp LICENSE "$OUTER_PACKAGE_DIR/"
+# Copy the .app bundle
+cp -R "$SOURCE_DIR/Eden Updater.app" "$TARGET_DIR/"
 
-# Create a simple launcher script
-echo -e "${YELLOW}Creating launcher script...${NC}"
-cat > "$OUTER_PACKAGE_DIR/Eden Updater.command" << 'EOF'
-#!/bin/bash
-# Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-# Launch the Eden Updater app
-open "$SCRIPT_DIR/eden_updater/eden_updater.app"
-EOF
-
-# Make the launcher script executable
-chmod +x "$OUTER_PACKAGE_DIR/Eden Updater.command"
-
-# Create a simple uninstaller script
-echo -e "${YELLOW}Creating uninstaller script...${NC}"
-cat > "$OUTER_PACKAGE_DIR/Uninstall.command" << 'EOF'
-#!/bin/bash
-echo "Eden Updater Uninstaller"
-echo "========================"
-echo ""
-echo "This will remove Eden Updater and its data."
-echo "Eden emulator installations will NOT be removed."
-echo ""
-read -p "Are you sure you want to continue? (y/N): " -n 1 -r
-echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Removing Eden Updater..."
-    
-    # Remove from Applications if symlinked
-    if [ -L "/Applications/Eden Updater.app" ]; then
-        rm "/Applications/Eden Updater.app"
-        echo "Removed Applications shortcut"
-    fi
-    
-    # Remove preferences (optional)
-    read -p "Remove preferences and settings? (y/N): " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf ~/Library/Preferences/com.example.eden_updater.plist 2>/dev/null
-        echo "Removed preferences"
-    fi
-    
-    echo "Eden Updater has been uninstalled."
-    echo "You can now delete this folder."
-else
-    echo "Uninstall cancelled."
+# Rename the app bundle to a simpler name for distribution
+if [ -d "$TARGET_DIR/Eden Updater.app" ]; then
+    mv "$TARGET_DIR/Eden Updater.app" "$TARGET_DIR/EdenUpdater.app"
 fi
 
-read -p "Press any key to continue..."
+# Create a simple README
+echo "Creating README..."
+cat > "$TARGET_DIR/README.txt" << 'EOF'
+Eden Updater - macOS
+
+To run Eden Updater:
+1. Double-click EdenUpdater.app
+
+Or from Terminal:
+1. Open Terminal in this directory
+2. Run: open EdenUpdater.app
+
+Command line options (when running from Terminal):
+  --auto-launch    : Automatically launch Eden after update
+  --channel stable : Use stable channel (default)
+  --channel nightly: Use nightly channel
+
+Example Terminal usage:
+  open EdenUpdater.app --args --auto-launch --channel nightly
+
+This is a portable version - no installation required.
+All files in this folder are needed for the application to work.
+
+For desktop shortcuts, run the updater and enable "Create desktop shortcut"
+in the settings. The shortcut will have auto-update functionality.
+
+Installation:
+- You can drag EdenUpdater.app to your Applications folder for easy access
+- Or keep it in this folder and create an alias to your desktop
+- The app will work from any location
 EOF
 
-# Make the uninstaller script executable
-chmod +x "$OUTER_PACKAGE_DIR/Uninstall.command"
+# Create a simple launcher script for command-line usage
+echo "Creating launcher script..."
+cat > "$TARGET_DIR/launch_eden_updater.sh" << 'EOF'
+#!/bin/bash
+# Eden Updater Launcher Script for macOS
+# This script launches the Eden Updater with command-line arguments
 
-# Create installation instructions
-echo -e "${YELLOW}Creating installation instructions...${NC}"
-cat > "$OUTER_PACKAGE_DIR/INSTALL.txt" << 'EOF'
-Eden Updater for macOS - Installation Instructions
-==================================================
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-Installation Options:
-
-1. SIMPLE INSTALLATION (Recommended)
-   - Double-click "Eden Updater.command" to run the application
-   - The app will run directly from this folder
-   - You can move this entire folder anywhere you like
-
-2. APPLICATIONS FOLDER INSTALLATION
-   - Drag "eden_updater/eden_updater.app" to your Applications folder
-   - Launch from Applications or Spotlight search
-
-3. DESKTOP SHORTCUT
-   - Right-click "eden_updater/eden_updater.app" and select "Make Alias"
-   - Drag the alias to your Desktop
-   - Rename it to "Eden Updater" if desired
-
-System Requirements:
-- macOS 10.14 (Mojave) or later
-- 64-bit Intel or Apple Silicon Mac
-
-First Run:
-- You may see a security warning on first launch
-- Go to System Preferences > Security & Privacy > General
-- Click "Open Anyway" to allow Eden Updater to run
-
-Uninstallation:
-- Run "Uninstall.command" to remove Eden Updater
-- Or simply delete this folder
-
-Support:
-- For issues, check the GitHub repository
-- Eden emulator files are stored in ~/Documents/Eden/
+# Launch the updater with any provided arguments
+open "$SCRIPT_DIR/EdenUpdater.app" --args "$@"
 EOF
 
-# Get the size of the package
-PACKAGE_SIZE=$(du -sh "$OUTER_PACKAGE_DIR" | cut -f1)
+chmod +x "$TARGET_DIR/launch_eden_updater.sh"
 
-echo -e "${GREEN}Package created successfully!${NC}"
-echo -e "Package location: ${YELLOW}$OUTER_PACKAGE_DIR/${NC}"
-echo -e "Package size: ${YELLOW}$PACKAGE_SIZE${NC}"
+# Create an installation script
+echo "Creating installation script..."
+cat > "$TARGET_DIR/install_to_applications.sh" << 'EOF'
+#!/bin/bash
+# Eden Updater Installation Script
+# This script copies the app to the Applications folder
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Installing Eden Updater to Applications folder..."
+
+# Check if Applications folder exists
+if [ ! -d "/Applications" ]; then
+    echo "Error: Applications folder not found!"
+    exit 1
+fi
+
+# Copy the app to Applications
+if [ -d "$SCRIPT_DIR/EdenUpdater.app" ]; then
+    cp -R "$SCRIPT_DIR/EdenUpdater.app" "/Applications/"
+    if [ $? -eq 0 ]; then
+        echo "Eden Updater installed successfully to /Applications/"
+        echo "You can now find it in Launchpad or run it from Applications folder."
+        
+        # Ask if user wants to launch it
+        read -p "Would you like to launch Eden Updater now? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            open "/Applications/EdenUpdater.app"
+        fi
+    else
+        echo "Error: Failed to copy app to Applications folder!"
+        echo "You may need to run this script with sudo or check permissions."
+        exit 1
+    fi
+else
+    echo "Error: EdenUpdater.app not found in current directory!"
+    exit 1
+fi
+EOF
+
+chmod +x "$TARGET_DIR/install_to_applications.sh"
+
 echo ""
-echo -e "${YELLOW}Contents:${NC}"
-echo "  - eden_updater.app (Main application)"
-echo "  - Eden Updater.command (Launcher script)"
-echo "  - Uninstall.command (Uninstaller)"
-echo "  - INSTALL.txt (Installation instructions)"
-echo "  - README.md and LICENSE"
+echo "Package created successfully in $OUTER_PACKAGE_DIR/"
+echo "You can distribute this entire folder or create a DMG file from it."
 echo ""
 
-# Offer to create a DMG
-read -p "Create a DMG disk image? (y/N): " -n 1 -r
+# Show files included
+echo "Files included:"
+find "$OUTER_PACKAGE_DIR" -type f | sed 's|^'\"$OUTER_PACKAGE_DIR\"'/|  |'
+
+# Calculate total size
+TOTAL_SIZE=$(du -s "$OUTER_PACKAGE_DIR" | cut -f1)
+# Convert from 512-byte blocks to bytes, then to MB
+TOTAL_SIZE_BYTES=$((TOTAL_SIZE * 512))
+SIZE_IN_MB=$(echo "scale=2; $TOTAL_SIZE_BYTES / 1024 / 1024" | bc -l 2>/dev/null || echo "$(($TOTAL_SIZE_BYTES / 1024 / 1024))")
+
 echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+echo "Total size: ${SIZE_IN_MB} MB ($TOTAL_SIZE_BYTES bytes)"
+
+# Check if hdiutil is available for DMG creation
+echo ""
+if command -v hdiutil >/dev/null 2>&1; then
     DMG_NAME="EdenUpdater_macOS.dmg"
+    echo "Creating DMG file..."
     
-    echo -e "${YELLOW}Creating DMG disk image...${NC}"
-    
-    # Remove existing DMG if it exists
     if [ -f "$DMG_NAME" ]; then
         rm "$DMG_NAME"
     fi
     
-    # Create DMG
-    hdiutil create -volname "Eden Updater" -srcfolder "$OUTER_PACKAGE_DIR" -ov -format UDZO "$DMG_NAME"
+    # Create a temporary DMG
+    TEMP_DMG="temp_$DMG_NAME"
+    
+    # Calculate size needed (add 10MB buffer)
+    DMG_SIZE=$((TOTAL_SIZE_BYTES / 1024 / 1024 + 10))
+    
+    # Create the DMG
+    hdiutil create -size ${DMG_SIZE}m -fs HFS+ -volname "Eden Updater" "$TEMP_DMG" >/dev/null 2>&1
     
     if [ $? -eq 0 ]; then
-        DMG_SIZE=$(du -sh "$DMG_NAME" | cut -f1)
-        echo -e "${GREEN}DMG created successfully!${NC}"
-        echo -e "DMG location: ${YELLOW}$DMG_NAME${NC}"
-        echo -e "DMG size: ${YELLOW}$DMG_SIZE${NC}"
+        # Mount the DMG
+        MOUNT_POINT=$(hdiutil attach "$TEMP_DMG" | grep "/Volumes" | cut -f3)
+        
+        if [ -n "$MOUNT_POINT" ]; then
+            # Copy files to the mounted DMG
+            cp -R "$OUTER_PACKAGE_DIR/$INNER_PACKAGE_DIR"/* "$MOUNT_POINT/"
+            
+            # Create a symbolic link to Applications folder for easy installation
+            ln -s /Applications "$MOUNT_POINT/Applications"
+            
+            # Unmount the DMG
+            hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1
+            
+            # Convert to compressed read-only DMG
+            hdiutil convert "$TEMP_DMG" -format UDZO -o "$DMG_NAME" >/dev/null 2>&1
+            
+            # Clean up temporary DMG
+            rm "$TEMP_DMG"
+            
+            if [ -f "$DMG_NAME" ]; then
+                DMG_SIZE_ACTUAL=$(stat -f%z "$DMG_NAME" 2>/dev/null || stat -c%s "$DMG_NAME" 2>/dev/null)
+                DMG_SIZE_IN_MB=$(echo "scale=2; $DMG_SIZE_ACTUAL / 1024 / 1024" | bc -l 2>/dev/null || echo "$(($DMG_SIZE_ACTUAL / 1024 / 1024))")
+                echo "DMG file created: $DMG_NAME (${DMG_SIZE_IN_MB} MB)"
+                echo ""
+                echo "The DMG includes:"
+                echo "  - EdenUpdater.app (drag to Applications folder to install)"
+                echo "  - README.txt with usage instructions"
+                echo "  - Command-line launcher script"
+                echo "  - Installation script for Applications folder"
+                echo "  - Applications folder shortcut for easy installation"
+            else
+                echo "Warning: DMG creation failed during compression"
+            fi
+        else
+            echo "Warning: Failed to mount temporary DMG"
+            rm "$TEMP_DMG"
+        fi
     else
-        echo -e "${RED}Failed to create DMG${NC}"
+        echo "Warning: Failed to create temporary DMG"
     fi
+else
+    echo "hdiutil not found - DMG creation skipped"
+    echo "You can manually create a DMG using Disk Utility or distribute the folder as-is"
 fi
 
 echo ""
-echo -e "${GREEN}macOS packaging complete!${NC}"
+echo "Packaging complete!"
+echo ""
+echo "Distribution options:"
+echo "1. Distribute the $OUTER_PACKAGE_DIR/ folder as a ZIP file"
+if [ -f "EdenUpdater_macOS.dmg" ]; then
+    echo "2. Distribute the EdenUpdater_macOS.dmg file (recommended for macOS)"
+fi
+echo ""
+echo "Users can:"
+echo "- Double-click EdenUpdater.app to run"
+echo "- Drag EdenUpdater.app to Applications folder to install"
+echo "- Run install_to_applications.sh for automatic installation"

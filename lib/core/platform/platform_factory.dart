@@ -93,9 +93,7 @@ class PlatformFactory {
       return PlatformConfig.android;
     }
     if (Platform.isMacOS) {
-      LoggingService.debug(
-        '[PlatformFactory] Platform.isMacOS: true (unsupported)',
-      );
+      LoggingService.debug('[PlatformFactory] Platform.isMacOS: true');
       return PlatformConfig.macos;
     }
 

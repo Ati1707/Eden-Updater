@@ -14,6 +14,7 @@ class AppConstants {
   static const String releaseChannelKey = 'release_channel';
   static const String edenExecutableKey = 'eden_executable_path';
   static const String createShortcutsKey = 'create_shortcuts';
+  static const String installationDateKey = 'installation_date';
 
   // Release Channels
   static const String stableChannel = 'stable';

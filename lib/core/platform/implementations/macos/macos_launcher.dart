@@ -32,10 +32,12 @@ class MacOSLauncher implements IPlatformLauncher {
 
       // Check if it's an .app bundle
       if (edenPath.contains('.app')) {
-        await _launchAppBundle(edenPath, false);
+        await _launchAppBundle(edenPath);
       } else {
-        await _launchExecutable(edenPath, false);
+        await _launchExecutable(edenPath);
       }
+
+      LoggingService.info('[macOS] Eden launched successfully');
     } catch (e) {
       LoggingService.error('[macOS] Failed to launch Eden', e);
       rethrow;
@@ -51,7 +53,7 @@ class MacOSLauncher implements IPlatformLauncher {
       final installDir = await _getInstallationDirectory(channel);
 
       // Create desktop shortcut
-      await _createDesktopShortcut(installDir, channel, false);
+      await _createDesktopShortcut(installDir, channel);
 
       // Create Applications folder shortcut
       await _createApplicationsShortcut(installDir, channel);
@@ -96,6 +98,7 @@ class MacOSLauncher implements IPlatformLauncher {
     return path.join(baseDir, channelDir);
   }
 
+  /// Check if Eden is currently running
   Future<bool> isEdenRunning(String channel) async {
     LoggingService.debug(
       '[macOS] Checking if Eden is running for channel: $channel',
@@ -106,8 +109,15 @@ class MacOSLauncher implements IPlatformLauncher {
       final result = await Process.run('pgrep', ['-f', 'Eden']);
 
       final isRunning = result.exitCode == 0;
-      LoggingService.debug('[macOS] Eden running status: $isRunning');
 
+      if (isRunning && result.stdout.toString().trim().isNotEmpty) {
+        final pids = result.stdout.toString().trim().split('\n');
+        LoggingService.debug(
+          '[macOS] Found ${pids.length} Eden process(es): ${pids.join(', ')}',
+        );
+      }
+
+      LoggingService.debug('[macOS] Eden running status: $isRunning');
       return isRunning;
     } catch (e) {
       LoggingService.error('[macOS] Error checking if Eden is running', e);
@@ -115,73 +125,93 @@ class MacOSLauncher implements IPlatformLauncher {
     }
   }
 
+  /// Terminate all running Eden processes
   Future<void> terminateEden(String channel) async {
     LoggingService.info('[macOS] Terminating Eden for channel: $channel');
 
     try {
-      // Use pkill to terminate Eden processes
+      // First check if Eden is running
+      final isRunning = await isEdenRunning(channel);
+      if (!isRunning) {
+        LoggingService.info('[macOS] No Eden processes found to terminate');
+        return;
+      }
+
+      // Use pkill to terminate Eden processes gracefully (SIGTERM)
       final result = await Process.run('pkill', ['-f', 'Eden']);
 
       if (result.exitCode == 0) {
-        LoggingService.info('[macOS] Eden terminated successfully');
+        LoggingService.info(
+          '[macOS] Sent termination signal to Eden processes',
+        );
 
-        // Wait a moment for processes to clean up
-        await Future.delayed(const Duration(seconds: 2));
+        // Wait for processes to clean up gracefully
+        await Future.delayed(const Duration(seconds: 3));
+
+        // Verify processes have terminated
+        final stillRunning = await isEdenRunning(channel);
+        if (stillRunning) {
+          LoggingService.warning(
+            '[macOS] Eden processes still running, forcing termination',
+          );
+
+          // Force kill if processes are still running (SIGKILL)
+          final forceResult = await Process.run('pkill', ['-9', '-f', 'Eden']);
+          if (forceResult.exitCode == 0) {
+            LoggingService.info('[macOS] Forcefully terminated Eden processes');
+            await Future.delayed(const Duration(seconds: 1));
+          }
+        } else {
+          LoggingService.info('[macOS] Eden processes terminated successfully');
+        }
       } else {
-        LoggingService.info('[macOS] No Eden processes found to terminate');
+        LoggingService.warning(
+          '[macOS] pkill returned non-zero exit code: ${result.exitCode}',
+        );
+        if (result.stderr.toString().trim().isNotEmpty) {
+          LoggingService.warning('[macOS] pkill stderr: ${result.stderr}');
+        }
       }
     } catch (e) {
       LoggingService.error('[macOS] Error terminating Eden', e);
-      rethrow;
+      throw LauncherException(
+        'Failed to terminate Eden processes: ${e.toString()}',
+        channel,
+      );
     }
   }
 
   /// Launch an .app bundle
-  Future<bool> _launchAppBundle(String appPath, bool portableMode) async {
+  Future<bool> _launchAppBundle(String appPath) async {
     LoggingService.info('[macOS] Launching .app bundle: $appPath');
 
     try {
-      final args = ['open', appPath];
-
-      // Add portable mode arguments if needed
-      if (portableMode) {
-        args.addAll(['--args', '--portable']);
-      }
-
       await Process.start('open', [appPath]);
-
-      // Don't wait for the process to complete as it will run independently
       LoggingService.info('[macOS] .app bundle launched successfully');
       return true;
     } catch (e) {
       LoggingService.error('[macOS] Error launching .app bundle', e);
-      return false;
+      throw LauncherException(
+        'Failed to launch .app bundle: ${e.toString()}',
+        appPath,
+      );
     }
   }
 
   /// Launch a regular executable
-  Future<bool> _launchExecutable(
-    String executablePath,
-    bool portableMode,
-  ) async {
+  Future<bool> _launchExecutable(String executablePath) async {
     LoggingService.info('[macOS] Launching executable: $executablePath');
 
     try {
-      final args = <String>[];
-
-      // Add portable mode arguments if needed
-      if (portableMode) {
-        args.add('--portable');
-      }
-
-      await Process.start(executablePath, args);
-
-      // Don't wait for the process to complete as it will run independently
+      await Process.start(executablePath, []);
       LoggingService.info('[macOS] Executable launched successfully');
       return true;
     } catch (e) {
       LoggingService.error('[macOS] Error launching executable', e);
-      return false;
+      throw LauncherException(
+        'Failed to launch executable: ${e.toString()}',
+        executablePath,
+      );
     }
   }
 
@@ -189,18 +219,29 @@ class MacOSLauncher implements IPlatformLauncher {
   Future<void> _createDesktopShortcut(
     String installPath,
     String channel,
-    bool portableMode,
   ) async {
-    LoggingService.info('[macOS] Creating desktop shortcut');
+    LoggingService.info(
+      '[macOS] Creating desktop shortcut for channel: $channel',
+    );
 
     try {
       final homeDir = Platform.environment['HOME'];
       if (homeDir == null) {
         LoggingService.warning('[macOS] HOME environment variable not found');
-        return;
+        throw LauncherException('HOME environment variable not found', '');
       }
 
       final desktopDir = path.join(homeDir, 'Desktop');
+
+      // Ensure desktop directory exists
+      final desktopDirectory = Directory(desktopDir);
+      if (!await desktopDirectory.exists()) {
+        LoggingService.warning(
+          '[macOS] Desktop directory does not exist: $desktopDir',
+        );
+        return;
+      }
+
       final fileHandler = MacOSFileHandler();
       final edenPath = fileHandler.getEdenExecutablePath(installPath, channel);
 
@@ -208,7 +249,7 @@ class MacOSLauncher implements IPlatformLauncher {
       final shortcutPath = path.join(desktopDir, '$shortcutName.command');
 
       // Create shell script that launches Eden
-      final scriptContent = _createLaunchScript(edenPath, portableMode);
+      final scriptContent = _createLaunchScript(edenPath);
 
       await File(shortcutPath).writeAsString(scriptContent);
       await fileHandler.makeExecutable(shortcutPath);
@@ -216,7 +257,7 @@ class MacOSLauncher implements IPlatformLauncher {
       LoggingService.info('[macOS] Desktop shortcut created: $shortcutPath');
     } catch (e) {
       LoggingService.error('[macOS] Error creating desktop shortcut', e);
-      // Don't rethrow as shortcuts are not critical
+      // Don't rethrow as shortcuts are not critical for core functionality
     }
   }
 
@@ -225,7 +266,9 @@ class MacOSLauncher implements IPlatformLauncher {
     String installPath,
     String channel,
   ) async {
-    LoggingService.info('[macOS] Creating Applications folder shortcut');
+    LoggingService.info(
+      '[macOS] Creating Applications folder shortcut for channel: $channel',
+    );
 
     try {
       final fileHandler = MacOSFileHandler();
@@ -234,7 +277,7 @@ class MacOSLauncher implements IPlatformLauncher {
       // Only create symlink if it's an .app bundle
       if (!edenPath.contains('.app')) {
         LoggingService.info(
-          '[macOS] Skipping Applications shortcut for non-.app bundle',
+          '[macOS] Skipping Applications shortcut for non-.app bundle: $edenPath',
         );
         return;
       }
@@ -245,46 +288,50 @@ class MacOSLauncher implements IPlatformLauncher {
           : 'Eden.app';
       final applicationsPath = path.join('/Applications', shortcutName);
 
+      // Verify the source .app bundle exists
+      if (!await Directory(appBundlePath).exists()) {
+        LoggingService.warning(
+          '[macOS] Source .app bundle does not exist: $appBundlePath',
+        );
+        return;
+      }
+
       // Remove existing symlink if it exists
       final existingLink = Link(applicationsPath);
       if (await existingLink.exists()) {
         await existingLink.delete();
+        LoggingService.debug('[macOS] Removed existing Applications shortcut');
       }
 
       // Create new symlink
       await Link(applicationsPath).create(appBundlePath);
 
       LoggingService.info(
-        '[macOS] Applications shortcut created: $applicationsPath',
+        '[macOS] Applications shortcut created: $applicationsPath -> $appBundlePath',
       );
     } catch (e) {
       LoggingService.error('[macOS] Error creating Applications shortcut', e);
-      // Don't rethrow as shortcuts are not critical
+      // Don't rethrow as shortcuts are not critical for core functionality
     }
   }
 
   /// Create launch script content
-  String _createLaunchScript(String edenPath, bool portableMode) {
-    final buffer = StringBuffer();
-    buffer.writeln('#!/bin/bash');
-    buffer.writeln('# Eden Launcher Script');
-    buffer.writeln('');
+  String _createLaunchScript(String edenPath) {
+    final script = StringBuffer();
+    script.writeln('#!/bin/bash');
+    script.writeln('# Eden Launcher Script');
+    script.writeln('# Generated by Eden Updater');
+    script.writeln();
 
     if (edenPath.contains('.app')) {
-      buffer.write('open "$edenPath"');
-      if (portableMode) {
-        buffer.write(' --args --portable');
-      }
+      script.writeln('open "$edenPath" &');
     } else {
-      buffer.write('"$edenPath"');
-      if (portableMode) {
-        buffer.write(' --portable');
-      }
+      script.writeln('"$edenPath" &');
     }
 
-    buffer.writeln(' &');
-    buffer.writeln('exit 0');
+    script.writeln();
+    script.writeln('exit 0');
 
-    return buffer.toString();
+    return script.toString();
   }
 }
