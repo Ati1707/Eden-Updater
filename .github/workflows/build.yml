@@ -137,3 +137,33 @@ jobs:
         name: android-build
         path: eden_updater_android/EdenUpdater.apk
         retention-days: 7
+        
+  build-macos:
+    runs-on: macos-latest
+    needs: test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.8'
+        channel: 'stable'
+        cache: true
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Run packaging script
+      run: |
+        chmod +x package_macos.sh
+        ./package_macos.sh
+      shell: bash
+
+    - name: Upload macOS build
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-build
+        path: EdenUpdater_macOS.dmg
+        retention-days: 7
